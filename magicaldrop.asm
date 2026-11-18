@@ -655,6 +655,8 @@ check_keyboard_input:
       beq $a0, 0x71, q_pressed        # Check if the key q was pressed
       beq $a0, 0x61, a_pressed        # check if key a was pressed 
       beq $a0, 0x64, d_pressed        # check if key d was pressed 
+      beq $a0, 0x77, w_pressed        # check if key w was pressed 
+      beq $a0, 0x73, s_pressed        # check if key s was pressed 
       # ... check other keys 
 
       j end_check_keyboard_input      # end
@@ -724,7 +726,16 @@ check_keyboard_input:
       addi $sp, $sp, 4         # moves the stack pointer up 4
 
       j end_check_keyboard_input    # end keyboard input 
-        
+
+  w_pressed:
+    # TODO: implement throw control
+    j end_check_keyboard_input    # end keyboard input 
+
+
+  s_pressed:
+    # TODO: implement grab control 
+    j end_check_keyboard_input    # end keyboard input 
+
 
 
 ##############################################################################
