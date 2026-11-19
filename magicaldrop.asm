@@ -30,10 +30,10 @@ ADDR_KBRD:
 
 #sleep time
 SLEEP_TIME:
-    .word 64
+    .word 500
 # Tick time
 TICK_CYCLE:
-    .word 500
+    .word 15000
 
 # Grid template - Stores 7 x 14 words, each representing the top left corner of one of the bubbles in the grid 
 .align 2
@@ -122,6 +122,9 @@ main:
 game_loop:
     # 1a. Check if key has been pressed
     # 1b. Check which key has been pressed
+    xori $a3 $a3 1
+    jal erase_fool
+    jal draw_fool
     jal check_keyboard_input
     # 2a. Check for collisions
 	# 2b. Update locations (capsules)
@@ -194,7 +197,7 @@ initialize_fool:
 
 draw_fool:
   # function to draw the fool
-  # input: s2 should store a valid player position
+  # input: s2 should store a valid player position, a3 is 0 for left hand up, 1 for otherwise
   # This should be along the row of GRID_HEIGHT, or slightly below
   # temporaries: t0 = address to draw to, t1 = fool pattern address
   # t2 = red, t3 = green, t4 = gold, t5 = face, t6 = color to write
@@ -214,7 +217,7 @@ draw_fool:
 
   # check which hand is up
   li $t7 0                         # load 0 to t7
-  beq $t7 $s2 fool_left_hand_up    # check if a1 is equal to 0
+  beq $t7 $a3 fool_left_hand_up    # check if a3 is equal to 0
   li $t7 512                       # load 4 to t7
   j draw_fool_loop                 # jump to fool loop
   
