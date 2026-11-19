@@ -616,6 +616,13 @@ shift_down_by_two:
         jr $ra                   # return 
 
 
+  draw_arrows:
+    # TODO: Implement this function
+    # draws arrow based on player pos s2 going up until it hits a bubble in Current_grid
+    # ideally takes an input a0 that toggles if the arrows are up or down
+    # probably want to use helper function get_fool_grid_pos, also implement a draw_arrow (singular) function with an input pixel, then just iterate through the current_grid
+
+
 
 
 ##############################################################################
@@ -705,6 +712,55 @@ get_random_color:
         j grid_builder_loop           # jump to start of loop
       grid_builder_loop_end:
         jr $ra                        # return 
+
+
+get_fool_grid_pos:
+  # helper function to return the bottommost index of the column that the fool is standing in from CURRENT_GRID
+  # returns that value (364, 368, 372, 376, 380, 384, 388) in v0
+  # temporaries: t0 = potential positions
+
+  #could be implemented with a loop, writing it out is faster though, involves shifting and math (could optimize this later though)
+  addi $t0 $s3 0           # set t0 to leftmost position
+  beq $s2 $t0 get_pos_0
+  addi $t0 $t0 32
+  beq $s2 $t0 get_pos_1
+  addi $t0 $t0 32
+  beq $s2 $t0 get_pos_2
+  addi $t0 $t0 32
+  beq $s2 $t0 get_pos_3
+  addi $t0 $t0 32
+  beq $s2 $t0 get_pos_4
+  addi $t0 $t0 32
+  beq $s2 $t0 get_pos_5
+  addi $t0 $t0 32
+  beq $s2 $t0 get_pos_6
+  addi $t0 $t0 32
+
+  get_pos_0:
+    addi $v0 $s1 364       # set value to appropriate position
+    jr $ra                 # return
+  get_pos_1:
+    addi $v0 $s1 368       # set value to appropriate position
+    jr $ra                 # return
+  get_pos_2:
+    addi $v0 $s1 372       # set value to appropriate position
+    jr $ra                 # return
+  get_pos_3:
+    addi $v0 $s1 376       # set value to appropriate position
+    jr $ra                 # return
+  get_pos_4:
+    addi $v0 $s1 380       # set value to appropriate position
+    jr $ra                 # return
+  get_pos_5:
+    addi $v0 $s1 384       # set value to appropriate position
+    jr $ra                 # return
+  get_pos_6:
+    addi $v0 $s1 388       # set value to appropriate position
+    jr $ra                 # return
+    
+  
+
+  
 
 
 check_game_over:
