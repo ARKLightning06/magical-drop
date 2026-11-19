@@ -30,7 +30,10 @@ ADDR_KBRD:
 
 #sleep time
 SLEEP_TIME:
-    .word 1000
+    .word 64
+# Tick time
+TICK_CYCLE:
+    .word 500
 
 # Grid template - Stores 7 x 14 words, each representing the top left corner of one of the bubbles in the grid 
 .align 2
@@ -91,6 +94,7 @@ CLOWN_COLOR_FACE:
   # s3 = CHARACTER_BOUND_LEFT
   # s4 = CHARACTER_BOUND_RIGHT
   # s5 = IS_PAUSED 
+  # s6 = TICK_TIME
 
 ##############################################################################
 # Main
@@ -101,6 +105,8 @@ CLOWN_COLOR_FACE:
 
     # Run the game.
 main:
+  #main function for running the game
+  # temporaries - t0 is used briefly for loading tick_cycle
     # Initialize the game
     jal initialize_s_vals           # initialize s values 
 
@@ -109,9 +115,8 @@ main:
     jal draw_background             # call the draw background function
     jal draw_border                 # call the draw border function
 
-    jal fill_board_random           # fill the board randomly (for testing purposes, possibly for lose screen as well)
-
     jal initialize_fool             # initialize player pos and bounds, and draw first fool
+    jal fill_first_two_rows_random
 
 
 game_loop:
@@ -121,17 +126,29 @@ game_loop:
     # 2a. Check for collisions
 	# 2b. Update locations (capsules)
 	# 3. Draw the screen
-    
-    
-	# 4. Sleep
+
+    lw $t0 TICK_CYCLE
+    ble $s6 $t0 skip_down_shift
+    li $s6 0
+    jal check_game_over
+    jal shift_down_by_two
+    jal fill_first_two_rows_random    #just to see update time 
+  
+    skip_down_shift:
+    jal update_board                  # update the board 
+
+
+	# 4. Sleep, and increment tick_time
       li $v0  32
       lw $a0 SLEEP_TIME
+      add $s6 $s6 $a0
       syscall
-      jal fill_board_random    #just to see update time 
     # 5. Go back to Step 1
     j game_loop
 
-  end_program:
+  game_over:
+    # display some sort of game over message... YOU LOSE!
+    
     li $v0, 10                      # end the program
     syscall
 
@@ -139,183 +156,6 @@ game_loop:
 ##############################################################################
 # Display Functions
 ##############################################################################
-
-
-draw_background:
-    #function to draw the background
-    lw $t1, BACKGROUND_COLOR        # t1 = background color (dark purple)
-    lw $t0, ADDR_DSPL       # t0 = base address for display 
-    li $t2, 65536           # set ending condition for loop
-    add $t2, $t2, $t0       
-    background_loop:
-      sw $t1, 0($t0)
-      addi $t0, $t0, 4
-      ble $t2, $t0, background_loop_end
-      j background_loop
-    background_loop_end:
-      jr $ra
-
-
-        
-draw_border:
-  # function to draw the border of the magical drop playing field
-  # temporaries: 
-  # t0: first column address, t1: second column address, t3: horizontal end condition, t4: vertical end condition 
-  # t5: color, t6: horizontal grid offset, t7: grid width, t8: column width
-
-  #load the temporaries
-  lw $t0, ADDR_DSPL
-  lw $t4, GRID_HEIGHT
-  lw $t5, BORDER_COLOR
-  lw $t6, GRID_HORIZONTAL_OFFSET
-  lw $t7, GRID_WIDTH
-  lw $t8, COLUMN_WIDTH
-  add $t0, $t0, $t6        #set the first column address
-  add $t1, $t8, $t7        #set the second column address
-  add $t1, $t1, $t0        # ^
-  add $t3, $t8, $t0        # set horizontal end condition based on col width
-  add $t4, $t4, $t0        # set vertical end condition based on grid height
-  
-
-  border_loop_column:
-      sw $t5, 0($t0)
-      sw $t5, 0($t1)
-      addi $t0, $t0, 4
-      addi $t1, $t1, 4
-      ble $t3, $t0, border_loop_horizontal_end
-      j border_loop_column
-
-    border_loop_horizontal_end:      
-      addi $t0, $t0, 512         #reset column addresses to start of next line
-      sub $t0, $t0, $t8
-      addi $t1, $t1, 512         #reset column addresses to start of next line
-      sub $t1, $t1, $t8
-      addi $t3, $t3, 512         # increment the horizontal end condition
-      ble $t4, $t0, border_loop_vertical_end
-      j border_loop_column
-
-  border_loop_vertical_end:
-      jr $ra
-
-
-
-
-
-draw_bubble:
-  # draws a bubble with a top left corner specified by $a0, color specified by $a1
-  # temporaries: t0 = address, t1 = color, t2 = sheen color, t3= background color, t4 = written color, 
-  # t7 = bubble pattern t8 = horizontal stop condition, t9 = vertical stop condition
-  
-  move $t0 $a0
-  move $t1 $a1
-  lw $t2 COLOR_SHEEN
-  lw $t3 BACKGROUND_COLOR
-  lw $t4 BACKGROUND_COLOR
-  addi $t8 $t0 32
-  addi $t9 $t0 4096
-
-  draw_bubble_loop:
-    #choose which color for t4 based on position of t0
-
-    #check corners
-    move $t7 $a0
-    beq $t0 $t7 set_bubble_color_background
-    addi $t7 $t7 4
-    beq $t0 $t7 set_bubble_color_background
-    addi $t7 $t7 20
-    beq $t0 $t7 set_bubble_color_background
-    addi $t7 $t7 4
-    beq $t0 $t7 set_bubble_color_background
-    addi $t7 $t7 512
-    beq $t0 $t7 set_bubble_color_background
-    addi $t7 $t7 -28
-    beq $t0 $t7 set_bubble_color_background
-    addi $t7 $t7 2560
-    beq $t0 $t7 set_bubble_color_background
-    addi $t7 $t7 28
-    beq $t0 $t7 set_bubble_color_background
-    addi $t7 $t7 512
-    beq $t0 $t7 set_bubble_color_background
-    addi $t7 $t7 -4
-    beq $t0 $t7 set_bubble_color_background
-    addi $t7 $t7 -20
-    beq $t0 $t7 set_bubble_color_background
-    addi $t7 $t7 -4
-    beq $t0 $t7 set_bubble_color_background
-
-    #check sheen
-    move $t7 $a0
-    addi $t7 $t7 528
-    beq $t0 $t7 set_bubble_color_sheen
-    addi $t7 $t7 512
-    beq $t0 $t7 set_bubble_color_sheen
-    addi $t7 $t7 4
-    beq $t0 $t7 set_bubble_color_sheen
-    addi $t7 $t7 512
-    beq $t0 $t7 set_bubble_color_sheen
-    addi $t7 $t7 4
-    beq $t0 $t7 set_bubble_color_sheen
-
-    #else, set to default color
-    j set_bubble_color_col
-
-
-    set_bubble_color_col:
-      move $t4 $t1
-      j draw_bubble_write
-    set_bubble_color_background:
-      move $t4 $t3
-      j draw_bubble_write
-    set_bubble_color_sheen:
-      move $t4 $t2
-      j draw_bubble_write
-
-    draw_bubble_write:
-    # write the color
-    sw $t4 0($t0)
-    addi $t0 $t0 4
-    beq $t8 $t0 draw_bubble_horizontal_end
-    j draw_bubble_loop
-
-    draw_bubble_horizontal_end:
-        addi $t0 $t0 480       # reset the address to beginning of next line (512 - 32)
-        addi $t8 $t8 512       # set horizontal end condition to end of next line
-        beq $t0 $t9 draw_bubble_loop_end
-        j draw_bubble_loop
-
-    draw_bubble_loop_end:
-      jr $ra
-
-
-
-
-
-fill_board_random:
-    # fills the board with 7 x 14 randomly colored bubbles
-    # helper functions: calls get_random_color and draw_bubble, which collectively use t0-4 and t7-9
-    # temporaries: t5 = Grid template index t6 = grid template end value
-
-    addi $sp, $sp, -4          # moves stack pointer a word
-    sw $ra 0($sp)              # push a word onto the stack
-
-    la $s0 GRID_TEMPLATE       # ensure s0 has correct persistent data, GRID_TEMPLATE address
-    addi $t5 $s0 0             # set $t5 to #s0
-    addi $t6 $t5 392           # set t6 to loop end condition
-
-  
-    random_fill_loop:
-        jal get_random_color   # call get_random_color
-        move $a1 $v0           # set a1 to random color value stored by v0
-        lw $a0 0($t5)          # store values of GRID_TEMPLATE in a0 (parameter for draw_bubble)
-        jal draw_bubble        # call draw_bubble
-        addi $t5 $t5 4         # increment t5 by 4
-        beq $t5 $t6 random_fill_loop_end          # check if loop is over
-        j random_fill_loop     # restart loop
-
-    random_fill_loop_end:
-        lw $ra, 0($sp)           # load old ra to new $ra from stack
-        addi $sp, $sp, 4         # moves the stack pointer up 4
-        jr $ra                   # return 
 
 
 initialize_fool:
@@ -547,6 +387,234 @@ erase_fool:
 
 
 
+draw_background:
+    #function to draw the background
+    lw $t1, BACKGROUND_COLOR        # t1 = background color (dark purple)
+    lw $t0, ADDR_DSPL       # t0 = base address for display 
+    li $t2, 65536           # set ending condition for loop
+    add $t2, $t2, $t0       
+    background_loop:
+      sw $t1, 0($t0)
+      addi $t0, $t0, 4
+      ble $t2, $t0, background_loop_end
+      j background_loop
+    background_loop_end:
+      jr $ra
+
+
+        
+draw_border:
+  # function to draw the border of the magical drop playing field
+  # temporaries: 
+  # t0: first column address, t1: second column address, t3: horizontal end condition, t4: vertical end condition 
+  # t5: color, t6: horizontal grid offset, t7: grid width, t8: column width
+
+  #load the temporaries
+  lw $t0, ADDR_DSPL
+  lw $t4, GRID_HEIGHT
+  lw $t5, BORDER_COLOR
+  lw $t6, GRID_HORIZONTAL_OFFSET
+  lw $t7, GRID_WIDTH
+  lw $t8, COLUMN_WIDTH
+  add $t0, $t0, $t6        #set the first column address
+  add $t1, $t8, $t7        #set the second column address
+  add $t1, $t1, $t0        # ^
+  add $t3, $t8, $t0        # set horizontal end condition based on col width
+  add $t4, $t4, $t0        # set vertical end condition based on grid height
+  
+
+  border_loop_column:
+      sw $t5, 0($t0)
+      sw $t5, 0($t1)
+      addi $t0, $t0, 4
+      addi $t1, $t1, 4
+      ble $t3, $t0, border_loop_horizontal_end
+      j border_loop_column
+
+    border_loop_horizontal_end:      
+      addi $t0, $t0, 512         #reset column addresses to start of next line
+      sub $t0, $t0, $t8
+      addi $t1, $t1, 512         #reset column addresses to start of next line
+      sub $t1, $t1, $t8
+      addi $t3, $t3, 512         # increment the horizontal end condition
+      ble $t4, $t0, border_loop_vertical_end
+      j border_loop_column
+
+  border_loop_vertical_end:
+      jr $ra
+
+
+
+
+
+draw_bubble:
+  # draws a bubble with a top left corner specified by $a0, color specified by $a1
+  # temporaries: t0 = address, t4 = written color, 
+  # t7 = bubble pattern t8 = horizontal stop condition, t9 = vertical stop condition
+  
+  move $t0 $a0               # store the top left corner of bubble to be drawn in t0
+  addi $t8 $t0 32            # set t8 to horizontal loop condition
+  addi $t9 $t0 4096          # set t9 to vertical loop condition 
+
+  draw_bubble_loop:
+    # if assigned color is background color, skip color selection
+    lw $t4 BACKGROUND_COLOR    # set t4 to background color
+    beq $a1 $t4 draw_bubble_write
+    
+    #choose which color for t4 based on position of t0
+
+    #check corners
+    move $t7 $a0
+    beq $t0 $t7 set_bubble_color_background
+    addi $t7 $t7 4
+    beq $t0 $t7 set_bubble_color_background
+    addi $t7 $t7 20
+    beq $t0 $t7 set_bubble_color_background
+    addi $t7 $t7 4
+    beq $t0 $t7 set_bubble_color_background
+    addi $t7 $t7 512
+    beq $t0 $t7 set_bubble_color_background
+    addi $t7 $t7 -28
+    beq $t0 $t7 set_bubble_color_background
+    addi $t7 $t7 2560
+    beq $t0 $t7 set_bubble_color_background
+    addi $t7 $t7 28
+    beq $t0 $t7 set_bubble_color_background
+    addi $t7 $t7 512
+    beq $t0 $t7 set_bubble_color_background
+    addi $t7 $t7 -4
+    beq $t0 $t7 set_bubble_color_background
+    addi $t7 $t7 -20
+    beq $t0 $t7 set_bubble_color_background
+    addi $t7 $t7 -4
+    beq $t0 $t7 set_bubble_color_background
+
+    #check sheen
+    move $t7 $a0
+    addi $t7 $t7 528
+    beq $t0 $t7 set_bubble_color_sheen
+    addi $t7 $t7 512
+    beq $t0 $t7 set_bubble_color_sheen
+    addi $t7 $t7 4
+    beq $t0 $t7 set_bubble_color_sheen
+    addi $t7 $t7 512
+    beq $t0 $t7 set_bubble_color_sheen
+    addi $t7 $t7 4
+    beq $t0 $t7 set_bubble_color_sheen
+
+    #else, set to default color
+    j set_bubble_color_col
+
+
+    set_bubble_color_col:
+      move $t4 $a1
+      j draw_bubble_write
+    set_bubble_color_background:
+      lw $t4 BACKGROUND_COLOR
+      j draw_bubble_write
+    set_bubble_color_sheen:
+      lw $t4 COLOR_SHEEN
+      j draw_bubble_write
+
+    draw_bubble_write:
+    # write the color
+    sw $t4 0($t0)
+    addi $t0 $t0 4
+    beq $t8 $t0 draw_bubble_horizontal_end
+    j draw_bubble_loop
+
+    draw_bubble_horizontal_end:
+        addi $t0 $t0 480       # reset the address to beginning of next line (512 - 32)
+        addi $t8 $t8 512       # set horizontal end condition to end of next line
+        beq $t0 $t9 draw_bubble_loop_end
+        j draw_bubble_loop
+
+    draw_bubble_loop_end:
+      jr $ra
+
+
+
+update_board:
+  # function to update the bitmap based on CURRENT_GRID
+  # calls helper function draw bubble which uses t1, 4, 7-9
+  # temporaries: t5 = grid template index, t6 = grid template loop end value
+  # t2 = current grid color, t3 = current grid address
+  
+    addi $sp, $sp, -4          # moves stack pointer a word
+    sw $ra 0($sp)              # push a word onto the stack
+
+    la $s0 GRID_TEMPLATE       # ensure s0 has correct persistent data, GRID_TEMPLATE address
+    la $s1 CURRENT_GRID        # ensure s1 has correct persistent data, CURRENT_GRID address 
+    addi $t5 $s0 0             # set $t5 to #s0
+    addi $t3 $s1 0            # set $t3 to #s1
+    addi $t6 $t5 392           # set t6 to loop end condition
+
+  
+    update_board_loop:
+        lw $a1 0($t3)          # store color of CURRENT_GRID in a1 (parameter for draw_bubble)
+        lw $a0 0($t5)          # store values of GRID_TEMPLATE in a0 (parameter for draw_bubble)
+        jal draw_bubble        # call draw_bubble
+        addi $t5 $t5 4         # increment t5 by 4
+        addi $t3 $t3 4         # increment t3 by 4
+        beq $t5 $t6 update_board_loop_end          # check if loop is over
+        j update_board_loop    # restart loop
+
+    update_board_loop_end:
+        lw $ra, 0($sp)           # load old ra to new $ra from stack
+        addi $sp, $sp, 4         # moves the stack pointer up 4
+        jr $ra                   # return 
+  
+        
+fill_first_two_rows_random:
+    # fills the first two rows with randomly colored bubbles
+    # helper functions: calls get_random_color, which uses t0-3
+    # only changes the values stored in current grid, nothing else
+    # temporaries: t5 = Current grid index, t6 = loop end condition
+
+    addi $sp, $sp, -4          # moves stack pointer a word
+    sw $ra 0($sp)              # push a word onto the stack
+
+    la $s1 CURRENT_GRID        # ensure s1 has correct persistent data, CURRENT_GRID address
+    addi $t5 $s1 0             # set $t5 to #s1
+    addi $t6 $t5 56            # set t6 to loop end condition
+
+  
+    random_fill_first_two_rows_loop:
+        jal get_random_color   # call get_random_color
+        sw $v0 0($t5)          # store the randomly generated color into CURRENT_GRID
+        addi $t5 $t5 4         # increment t5 by 4
+        beq $t5 $t6 random_fill_first_two_rows_loop_end          # check if loop is over
+        j random_fill_first_two_rows_loop                        # restart loop
+
+    random_fill_first_two_rows_loop_end:
+        lw $ra, 0($sp)           # load old ra to new $ra from stack
+        addi $sp, $sp, 4         # moves the stack pointer up 4
+        jr $ra                   # return
+
+
+shift_down_by_two:
+  # function to move everything in the current grid down by two rows
+  # temporaries: t3 = address of bottom right corner of CURRENT_GRID, decremented by 4
+  # t4 = address 2 rows above t3, t5 = color two rows above t3, t6 = loop end condition
+
+    la $s1 CURRENT_GRID        # ensure s1 has correct persistent data, CURRENT_GRID address 
+    addi $t3 $s1 388           # set $t3 to s1 bottom right
+    addi $t6 $s1 56            # set t6 to loop end condition
+    
+    shift_down_by_two_loop:
+        addi $t4 $t3 -56       # set t4 to the address of the bubble two rows above
+        lw $t5 0($t4)          # set t5 to color of t4's bubble
+        sw $t5 0($t3)          # set t3's bubble to t5 color (color of the bubble two rows below)
+        addi $t3 $t3 -4         # increment t3 by -4
+        blt $t3 $t6 shift_down_by_two_loop_end          # check if loop is over
+        j shift_down_by_two_loop    # restart loop
+
+    shift_down_by_two_loop_end:
+        jr $ra                   # return 
+
+
+
+
 ##############################################################################
 # Helper Functions
 ##############################################################################
@@ -561,8 +629,11 @@ initialize_s_vals:
   # s3 = CHARACTER_BOUND_LEFT (externally handled)
   # s4 = CHARACTER_BOUND_RIGHT (externally handled)
   # s5 = IS_PAUSED 
+  # s6 = TICK_TIME
 
-  li $s5 0
+  li $s5 0        # set s5 to 0
+  li $s6 0        # set s6 to 0 
+  jr $ra          # return
   
 
 
@@ -598,8 +669,9 @@ get_random_color:
     
 
   build_grid_template:
-    # function to build the grid template (see .data for details)
-    # temporaries: $t0 = address to be stored, $t1 = horizontal loop condition, $t2 = vertical loop condition, t3 = GRID_TEMPLATE
+    # function to build the grid template (see .data for details) and current grid
+    # temporaries: $t0 = address to be stored, $t1 = horizontal loop condition, $t2 = vertical loop condition, t3 = GRID_TEMPLATE, t4 = CURRENT_GRID
+    # t5 = background color
     # $t8 = grid horizontal offset, t9 = column width
 
     lw $t0 ADDR_DSPL                  # store ADDR_DSPL in t0
@@ -608,13 +680,17 @@ get_random_color:
     add $t0 $t0 $t8                   # add offset and column width to initial address to obtain start of grid template
     add $t0 $t0 $t9                   
     addi $t1 $t0 224                  # set t1 to initial horizontal loop condition
-    addi $t2 $t0 53744                 # set t2 to vertical loop condition
+    addi $t2 $t0 53744                # set t2 to vertical loop condition
     la $t3 GRID_TEMPLATE              # set t3 to GRID_TEMPLATE address
+    la $t4 CURRENT_GRID               # set t4 to CURRENT_GRID
+    lw $t5 BACKGROUND_COLOR           # set t5 to background color 
 
     grid_builder_loop:
       sw $t0 0($t3)                   # store t0 in GRID_TEMPLATE through t3
-      addi $t0 $t0 32                  # increment t0 by 32
+      sw $t5 0($t4)                   # store background_color in CURRENT GRID
+      addi $t0 $t0 32                 # increment t0 by 32
       addi $t3 $t3 4                  # increment t3 by 4
+      addi $t4 $t4 4                  # increment t4 by 4 
       beq $t0 $t1 horizontal_grid_builder_loop_end        # check horizontal loop condition
       j grid_builder_loop                                 # jump to start of loop 
       
@@ -628,6 +704,30 @@ get_random_color:
         jr $ra                        # return 
 
 
+check_game_over:
+  # function to check of the game ends
+  # temporaries: t3 = bottom right, t4 = background color, t5 = addressed color, t6 = loop end condition
+  
+    la $s1 CURRENT_GRID        # ensure s1 has correct persistent data, CURRENT_GRID address 
+    addi $t3 $s1 388           # set $t3 to s1 bottom right
+    lw $t4 BACKGROUND_COLOR    # set t4 to background color
+    addi $t6 $s1 336           # set t6 to loop end condition
+    
+    check_game_over_loop:
+        lw $t5 0($t3)          # set t5 to color of t4's bubble
+        bne $t5 $t4 check_game_over_is_over       # if the color is not background, game is over
+        addi $t3 $t3 -4        # increment t3 by -4
+        blt $t3 $t6 check_game_over_loop_end          # check if loop is over
+        j check_game_over_loop    # restart loop
+
+    check_game_over_loop_end:
+        jr $ra                   # return 
+
+    check_game_over_is_over:
+      jal shift_down_by_two
+      j game_over
+      
+
 
 ##############################################################################
 # Input Functions
@@ -636,7 +736,6 @@ get_random_color:
 check_keyboard_input:
   # function for checking if a key has been pressed and which one
   # temporaries: t0 = keyboard address, t1 = first word, t2 = second word
-  # t3 = q, t4 = p, t5 = w, t6 = s, t7 = a, t8 = d
   
 	li 		$v0, 32                 # perfrom syscall 
 	li 		$a0, 1
@@ -650,13 +749,17 @@ check_keyboard_input:
     jr $ra 
 
     keyboard_input:
-      lw $a0, 4($t0)                  # Load second word from keyboard
-      beq $a0, 0x70, p_pressed        # Check if the key q was pressed
-      beq $a0, 0x71, q_pressed        # Check if the key q was pressed
-      beq $a0, 0x61, a_pressed        # check if key a was pressed 
-      beq $a0, 0x64, d_pressed        # check if key d was pressed 
-      beq $a0, 0x77, w_pressed        # check if key w was pressed 
-      beq $a0, 0x73, s_pressed        # check if key s was pressed 
+      # perform input check
+      lw $t2, 4($t0)                  # Load second word from keyboard
+      lw $t1, 0($t0)                  # Check if stack is empty
+      beq $t1 1 keyboard_input        # loop until stack is empty
+
+      beq $t2, 0x70, p_pressed        # Check if the key q was pressed
+      beq $t2, 0x71, q_pressed        # Check if the key q was pressed
+      beq $t2, 0x61, a_pressed        # check if key a was pressed 
+      beq $t2, 0x64, d_pressed        # check if key d was pressed 
+      beq $t2, 0x77, w_pressed        # check if key w was pressed 
+      beq $t2, 0x73, s_pressed        # check if key s was pressed 
       # ... check other keys 
 
       j end_check_keyboard_input      # end
