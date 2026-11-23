@@ -652,7 +652,6 @@ shift_down_by_one:
   
 
 draw_arrows:
-    # TODO: Implement this function
     # draws arrow based on player pos s2 going up until it hits a bubble in Current_grid
     # will draw arrows facing up or down depending on s1 (bubbles held)
     # uses helper functions get_fool_grid_pos and get_lowest_bubble_grid_pos, which use t0-3
@@ -1011,6 +1010,7 @@ check_keyboard_input:
       j end_check_keyboard_input      # end
 
     p_pressed:
+      #TODO implement this function (or helper functions, need to display a paused message somehow)
       # sub function handling the case when keyboard input is p
       # pauses the game
       # toggles s5 between 0 and 1
@@ -1086,10 +1086,13 @@ check_keyboard_input:
       addi $sp, $sp, -4          # moves stack pointer a word
       sw $ra 0($sp)              # push a word onto the stack
 
-
       li $s1 0                   # sets BUBBLES_HELD to 0
-      
 
+      jal get_lowest_bubble_grid_pos     # returns grid pos in v0, returns 0 in v1 if there is a bubble 
+
+
+      no_bubble_found:
+      
       # pull ra from stack 
       lw $ra, 0($sp)           # load old ra to new $ra from stack
       addi $sp, $sp, 4         # moves the stack pointer up 4
