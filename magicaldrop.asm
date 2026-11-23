@@ -30,10 +30,10 @@ ADDR_KBRD:
 
 #sleep time
 SLEEP_TIME:
-    .word 500
+    .word 100
 # Tick time
 TICK_CYCLE:
-    .word 15000
+    .word 500
 
 # Grid template - Stores 7 x 14 words, each representing the top left corner of one of the bubbles in the grid 
 .align 2
@@ -120,7 +120,7 @@ main:
     jal draw_border                 # call the draw border function
 
     jal initialize_fool             # initialize player pos and bounds, and draw first fool
-    jal fill_first_two_rows_random
+    jal fill_first_three_rows_random
 
 
 game_loop:
@@ -138,8 +138,8 @@ game_loop:
     ble $s6 $t0 skip_down_shift
     li $s6 0
     jal check_game_over
-    jal shift_down_by_two
-    jal fill_first_two_rows_random    #just to see update time 
+    jal shift_down_by_one
+    jal fill_first_row_random    #just to see update time 
   
     skip_down_shift:
     jal update_board                  # update the board 
@@ -574,8 +574,8 @@ update_board:
         jr $ra                   # return 
   
         
-fill_first_two_rows_random:
-    # fills the first two rows with randomly colored bubbles
+fill_first_three_rows_random:
+    # fills the first three rows with randomly colored bubbles
     # helper functions: calls get_random_color, which uses t0-3
     # only changes the values stored in current grid, nothing else
     # temporaries: t5 = Current grid index, t6 = loop end condition
@@ -585,40 +585,66 @@ fill_first_two_rows_random:
 
     la $s1 CURRENT_GRID        # ensure s1 has correct persistent data, CURRENT_GRID address
     addi $t5 $s1 0             # set $t5 to #s1
-    addi $t6 $t5 56            # set t6 to loop end condition
+    addi $t6 $t5 84            # set t6 to loop end condition
 
   
-    random_fill_first_two_rows_loop:
+    random_fill_first_three_rows_loop:
         jal get_random_color   # call get_random_color
         sw $v0 0($t5)          # store the randomly generated color into CURRENT_GRID
         addi $t5 $t5 4         # increment t5 by 4
-        beq $t5 $t6 random_fill_first_two_rows_loop_end          # check if loop is over
-        j random_fill_first_two_rows_loop                        # restart loop
+        beq $t5 $t6 random_fill_first_three_rows_loop_end          # check if loop is over
+        j random_fill_first_three_rows_loop                        # restart loop
 
-    random_fill_first_two_rows_loop_end:
+    random_fill_first_three_rows_loop_end:
+        lw $ra, 0($sp)           # load old ra to new $ra from stack
+        addi $sp, $sp, 4         # moves the stack pointer up 4
+        jr $ra                   # return
+
+fill_first_row_random:
+    # fills the first singular row with randomly colored bubbles
+    # helper functions: calls get_random_color, which uses t0-3
+    # only changes the values stored in current grid, nothing else
+    # temporaries: t5 = Current grid index, t6 = loop end condition
+
+    addi $sp, $sp, -4          # moves stack pointer a word
+    sw $ra 0($sp)              # push a word onto the stack
+
+    la $s1 CURRENT_GRID        # ensure s1 has correct persistent data, CURRENT_GRID address
+    addi $t5 $s1 0             # set $t5 to #s1
+    addi $t6 $t5 28            # set t6 to loop end condition
+
+  
+    random_fill_first_row_loop:
+        jal get_random_color   # call get_random_color
+        sw $v0 0($t5)          # store the randomly generated color into CURRENT_GRID
+        addi $t5 $t5 4         # increment t5 by 4
+        beq $t5 $t6 random_fill_first_row_loop_end          # check if loop is over
+        j random_fill_first_row_loop                        # restart loop
+
+    random_fill_first_row_loop_end:
         lw $ra, 0($sp)           # load old ra to new $ra from stack
         addi $sp, $sp, 4         # moves the stack pointer up 4
         jr $ra                   # return
 
 
-shift_down_by_two:
-  # function to move everything in the current grid down by two rows
+shift_down_by_one:
+  # function to move everything in the current grid down by one row 
   # temporaries: t3 = address of bottom right corner of CURRENT_GRID, decremented by 4
   # t4 = address 2 rows above t3, t5 = color two rows above t3, t6 = loop end condition
 
     la $s1 CURRENT_GRID        # ensure s1 has correct persistent data, CURRENT_GRID address 
     addi $t3 $s1 388           # set $t3 to s1 bottom right
-    addi $t6 $s1 56            # set t6 to loop end condition
+    addi $t6 $s1 28            # set t6 to loop end condition
     
-    shift_down_by_two_loop:
-        addi $t4 $t3 -56       # set t4 to the address of the bubble two rows above
+    shift_down_by_one_loop:
+        addi $t4 $t3 -28       # set t4 to the address of the bubble one row above
         lw $t5 0($t4)          # set t5 to color of t4's bubble
-        sw $t5 0($t3)          # set t3's bubble to t5 color (color of the bubble two rows below)
+        sw $t5 0($t3)          # set t3's bubble to t5 color (color of the bubble one row below)
         addi $t3 $t3 -4         # increment t3 by -4
-        blt $t3 $t6 shift_down_by_two_loop_end          # check if loop is over
-        j shift_down_by_two_loop    # restart loop
+        blt $t3 $t6 shift_down_by_one_loop_end          # check if loop is over
+        j shift_down_by_one_loop    # restart loop
 
-    shift_down_by_two_loop_end:
+    shift_down_by_one_loop_end:
         jr $ra                   # return 
 
 
@@ -928,7 +954,7 @@ check_game_over:
     la $s1 CURRENT_GRID        # ensure s1 has correct persistent data, CURRENT_GRID address 
     addi $t3 $s1 388           # set $t3 to s1 bottom right
     lw $t4 BACKGROUND_COLOR    # set t4 to background color
-    addi $t6 $s1 336           # set t6 to loop end condition
+    addi $t6 $s1 364           # set t6 to loop end condition
     
     check_game_over_loop:
         lw $t5 0($t3)          # set t5 to color of t4's bubble
@@ -941,7 +967,7 @@ check_game_over:
         jr $ra                   # return 
 
     check_game_over_is_over:
-      jal shift_down_by_two
+      jal shift_down_by_one
       j game_over
       
 
