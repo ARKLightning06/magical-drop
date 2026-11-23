@@ -654,7 +654,7 @@ shift_down_by_one:
 draw_arrows:
     # TODO: Implement this function
     # draws arrow based on player pos s2 going up until it hits a bubble in Current_grid
-    # will draw arros facing up or down depending on s7 (is_holding_bubbles)
+    # will draw arrows facing up or down depending on s1 (bubbles held)
     # uses helper functions get_fool_grid_pos and get_lowest_bubble_grid_pos, which use t0-3
     # temporaries: t9 = first block to draw arrows in, t8 = last block to draw arrows in
     
@@ -708,7 +708,7 @@ draw_arrow:
   # helper function to draw a single arrow centered at a given address of the bitmap (left centered, i.e. in 0-31, would be 15)
   # takes inputs: a0 = address of the centermost top pixel
   # temporaries: t0 = address to write to, t1 = color, t2 up/down (-512 for pointing down, 0 for pointing up)
-  # saves: s7, checks if holding
+  # saves: s1, checks if holding
   # PRECONDITION cannot be outside valid range or gonna get errors (valid range for bitmap)
 
   addi $t0 $a0 0              # set to to starting address 
@@ -716,12 +716,12 @@ draw_arrow:
 
 
   # check if going up or down
-  bne $s7 0 draw_arrow_pointing_down
-  li $t2 0
+  bne $s1 0 draw_arrow_pointing_up
+  li $t2 -512
   j start_drawing_arrow
 
-  draw_arrow_pointing_down:
-  li $t2 -512
+  draw_arrow_pointing_up:
+  li $t2 0
   j start_drawing_arrow
 
   start_drawing_arrow:
@@ -755,18 +755,21 @@ draw_arrow:
 initialize_s_vals:
   # function to initialize s values
   # Only initializes the simple ones, others have their own methods
-  # s0 = GRID_TEMPLATE (externally handled)
-  # s1 = CURRENT_GRID (externally handled)
-  # s2 = CHARACTER_POS (externally handled)
-  # s3 = CHARACTER_BOUND_LEFT (externally handled)
-  # s4 = CHARACTER_BOUND_RIGHT (externally handled)
+  # SAVED REGISTERS 
+  # s0 = CHACACTER_POS_2 (external)
+  # s1 = BUBBLES_HELD_1 
+  # s2 = CHARACTER_POS_1 (external)
+  # s3 = BUBBLES_HELD_2
+  # s4 = HELD_COLOR_1 
   # s5 = IS_PAUSED 
   # s6 = TICK_TIME
-  # s7 = IS_HOLDING_BUBBLES
-
+  # s7 = HELD_COLOR_2
+  li $s1 0        # set s6 to 0 
+  li $s3 0        # set s6 to 0 
+  lw $s4 BACKGROUND_COLOR        # set s4 to BACKGROUND_COLOR
   li $s5 0        # set s5 to 0
   li $s6 0        # set s6 to 0 
-  li $s7 0        # set s7 to 0 
+  lw $s7 BACKGROUND_COLOR        # set s7 to BACKGROUND_COLOR
   jr $ra          # return
   
 
@@ -1084,7 +1087,7 @@ check_keyboard_input:
       sw $ra 0($sp)              # push a word onto the stack
 
 
-      li $s7 1                   # sets is_holding_bubbles to false 
+      li $s1 0                   # sets BUBBLES_HELD to 0
       
 
       # pull ra from stack 
@@ -1096,11 +1099,12 @@ check_keyboard_input:
 
   s_pressed:
     # TODO: implement grab control 
+    # should use helper method get_lowest_bubble_grid_pos
       addi $sp, $sp, -4          # moves stack pointer a word
       sw $ra 0($sp)              # push a word onto the stack
 
 
-      li $s7 0                   # sets is_holding_bubbles to false 
+      li $s1 1                   # sets is_holding_bubbles to false 
       
 
       # pull ra from stack 
