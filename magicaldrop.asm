@@ -2,7 +2,7 @@
 # This file contains our implementation of Magical Drop.
 #
 # Student 1: Andrew Koes, 1012691482
-# Student 2: Name, Student Number (if applicable)
+# Student 2: Andrew Li, 1012142441
 #
 # We assert that the code submitted here is entirely our own 
 # creation, and will indicate otherwise when it is not.
@@ -620,8 +620,10 @@ shift_down_by_two:
     # TODO: Implement this function
     # draws arrow based on player pos s2 going up until it hits a bubble in Current_grid
     # ideally takes an input a0 that toggles if the arrows are up or down
-    # probably want to use helper function get_fool_grid_pos, also implement a draw_arrow (singular) function with an input pixel, then just iterate through the current_grid
-
+    # probably want to use helper function get_fool_grid_pos, also implement a draw_arrow (singular) function with an input pixel, 
+    #then just iterate through the current_grid
+    
+    
 
 
 
