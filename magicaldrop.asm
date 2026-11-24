@@ -2,7 +2,7 @@
 # This file contains our implementation of Magical Drop.
 #
 # Student 1: Andrew Koes, 1012691482
-# Student 2: Andrew Li, 1012142441
+# Student 2: Name, Student Number (if applicable)
 #
 # We assert that the code submitted here is entirely our own 
 # creation, and will indicate otherwise when it is not.
@@ -30,10 +30,10 @@ ADDR_KBRD:
 
 #sleep time
 SLEEP_TIME:
-    .word 500
+    .word 100
 # Tick time
 TICK_CYCLE:
-    .word 15000
+    .word 3000
 
 # Grid template - Stores 7 x 14 words, each representing the top left corner of one of the bubbles in the grid 
 .align 2
@@ -52,6 +52,12 @@ COLUMN_WIDTH:
 GRID_HEIGHT:
     .word 57344
 
+# Player specifications (set in initialize_fool)
+PLAYER_1_BOUND_LEFT:
+  .word 0
+PLAYER_1_BOUND_RIGHT:
+  .word 0
+
 # Colors
 BACKGROUND_COLOR:
   .word 0x1C0333
@@ -68,6 +74,9 @@ COLOR_GREEN:
 COLOR_YELLOW:
   .word 0xFFD500
 COLOR_SHEEN:
+  .word 0xFFFDF5
+  
+COLOR_ARROW:
   .word 0xFFFDF5
 
 CLOWN_COLOR_RED:
@@ -87,14 +96,15 @@ CLOWN_COLOR_FACE:
 # Code
 ##############################################################################
 
-  # SAVED REGISTERS
-  # s0 = GRID_TEMPLATE
-  # s1 = CURRENT_GRID
-  # s2 = CHARACTER_POS
-  # s3 = CHARACTER_BOUND_LEFT
-  # s4 = CHARACTER_BOUND_RIGHT
+  # SAVED REGISTERS 
+  # s0 = CHACACTER_POS_2
+  # s1 = BUBBLES_HELD_1
+  # s2 = CHARACTER_POS_1
+  # s3 = BUBBLES_HELD_2
+  # s4 = HELD_COLOR_1
   # s5 = IS_PAUSED 
   # s6 = TICK_TIME
+  # s7 = HELD_COLOR_2
 
 ##############################################################################
 # Main
@@ -116,7 +126,7 @@ main:
     jal draw_border                 # call the draw border function
 
     jal initialize_fool             # initialize player pos and bounds, and draw first fool
-    jal fill_first_two_rows_random
+    jal fill_first_three_rows_random
 
 
 game_loop:
@@ -134,11 +144,12 @@ game_loop:
     ble $s6 $t0 skip_down_shift
     li $s6 0
     jal check_game_over
-    jal shift_down_by_two
-    jal fill_first_two_rows_random    #just to see update time 
+    jal shift_down_by_one
+    jal fill_first_row_random    #just to see update time 
   
     skip_down_shift:
     jal update_board                  # update the board 
+    jal draw_arrows
 
 
 	# 4. Sleep, and increment tick_time
@@ -174,12 +185,11 @@ initialize_fool:
     add $s2 $s2 $t2
     add $s2 $s2 $t3
     move $t0 $s2                      # set t0 to bottom 
-    addi $s3 $t0 0                    # set s3 to player bount left 
-    addi $s2 $s2 96                   # center s2
+    sw $t0 PLAYER_1_BOUND_LEFT        # set player1 bound left 
     addi $t0 $t0 96                   # center t0 
     addi $s2 $t0 0                    # set player pos 
     addi $t0 $t0 96                   # center t0 
-    addi $s4 $t0 0                    # set player bound right 
+    sw $t0 PLAYER_1_BOUND_RIGHT       # set player2 bound right 
 
     # push ra onto stack 
     addi $sp, $sp, -4          # moves stack pointer a word
@@ -546,11 +556,10 @@ update_board:
     addi $sp, $sp, -4          # moves stack pointer a word
     sw $ra 0($sp)              # push a word onto the stack
 
-    la $s0 GRID_TEMPLATE       # ensure s0 has correct persistent data, GRID_TEMPLATE address
-    la $s1 CURRENT_GRID        # ensure s1 has correct persistent data, CURRENT_GRID address 
-    addi $t5 $s0 0             # set $t5 to #s0
-    addi $t3 $s1 0            # set $t3 to #s1
+    la $t5 GRID_TEMPLATE       # load GRID_TEMPLATE to t5
+    la $t3 CURRENT_GRID        # load CURRENT_GRID to t3 
     addi $t6 $t5 392           # set t6 to loop end condition
+
 
   
     update_board_loop:
@@ -568,8 +577,8 @@ update_board:
         jr $ra                   # return 
   
         
-fill_first_two_rows_random:
-    # fills the first two rows with randomly colored bubbles
+fill_first_three_rows_random:
+    # fills the first three rows with randomly colored bubbles
     # helper functions: calls get_random_color, which uses t0-3
     # only changes the values stored in current grid, nothing else
     # temporaries: t5 = Current grid index, t6 = loop end condition
@@ -577,53 +586,163 @@ fill_first_two_rows_random:
     addi $sp, $sp, -4          # moves stack pointer a word
     sw $ra 0($sp)              # push a word onto the stack
 
-    la $s1 CURRENT_GRID        # ensure s1 has correct persistent data, CURRENT_GRID address
-    addi $t5 $s1 0             # set $t5 to #s1
-    addi $t6 $t5 56            # set t6 to loop end condition
+    la $t5 CURRENT_GRID        # set t5 to current grid 
+    addi $t6 $t5 84            # set t6 to loop end condition
 
   
-    random_fill_first_two_rows_loop:
+    random_fill_first_three_rows_loop:
         jal get_random_color   # call get_random_color
         sw $v0 0($t5)          # store the randomly generated color into CURRENT_GRID
         addi $t5 $t5 4         # increment t5 by 4
-        beq $t5 $t6 random_fill_first_two_rows_loop_end          # check if loop is over
-        j random_fill_first_two_rows_loop                        # restart loop
+        beq $t5 $t6 random_fill_first_three_rows_loop_end          # check if loop is over
+        j random_fill_first_three_rows_loop                        # restart loop
 
-    random_fill_first_two_rows_loop_end:
+    random_fill_first_three_rows_loop_end:
+        lw $ra, 0($sp)           # load old ra to new $ra from stack
+        addi $sp, $sp, 4         # moves the stack pointer up 4
+        jr $ra                   # return
+
+fill_first_row_random:
+    # fills the first singular row with randomly colored bubbles
+    # helper functions: calls get_random_color, which uses t0-3
+    # only changes the values stored in current grid, nothing else
+    # temporaries: t5 = Current grid index, t6 = loop end condition
+
+    addi $sp, $sp, -4          # moves stack pointer a word
+    sw $ra 0($sp)              # push a word onto the stack
+
+    la $t5 CURRENT_GRID        # set t5 to current grid 
+    addi $t6 $t5 28            # set t6 to loop end condition
+
+  
+    random_fill_first_row_loop:
+        jal get_random_color   # call get_random_color
+        sw $v0 0($t5)          # store the randomly generated color into CURRENT_GRID
+        addi $t5 $t5 4         # increment t5 by 4
+        beq $t5 $t6 random_fill_first_row_loop_end          # check if loop is over
+        j random_fill_first_row_loop                        # restart loop
+
+    random_fill_first_row_loop_end:
         lw $ra, 0($sp)           # load old ra to new $ra from stack
         addi $sp, $sp, 4         # moves the stack pointer up 4
         jr $ra                   # return
 
 
-shift_down_by_two:
-  # function to move everything in the current grid down by two rows
+shift_down_by_one:
+  # function to move everything in the current grid down by one row 
   # temporaries: t3 = address of bottom right corner of CURRENT_GRID, decremented by 4
   # t4 = address 2 rows above t3, t5 = color two rows above t3, t6 = loop end condition
 
-    la $s1 CURRENT_GRID        # ensure s1 has correct persistent data, CURRENT_GRID address 
-    addi $t3 $s1 388           # set $t3 to s1 bottom right
-    addi $t6 $s1 56            # set t6 to loop end condition
+    la $t3 CURRENT_GRID        # set t3 to current grid  
+    addi $t6 $t3 28            # set t6 to loop end condition
+    addi $t3 $t3 388           # set $t3 to bottom right
     
-    shift_down_by_two_loop:
-        addi $t4 $t3 -56       # set t4 to the address of the bubble two rows above
+    shift_down_by_one_loop:
+        addi $t4 $t3 -28       # set t4 to the address of the bubble one row above
         lw $t5 0($t4)          # set t5 to color of t4's bubble
-        sw $t5 0($t3)          # set t3's bubble to t5 color (color of the bubble two rows below)
+        sw $t5 0($t3)          # set t3's bubble to t5 color (color of the bubble one row below)
         addi $t3 $t3 -4         # increment t3 by -4
-        blt $t3 $t6 shift_down_by_two_loop_end          # check if loop is over
-        j shift_down_by_two_loop    # restart loop
+        blt $t3 $t6 shift_down_by_one_loop_end          # check if loop is over
+        j shift_down_by_one_loop    # restart loop
 
-    shift_down_by_two_loop_end:
+    shift_down_by_one_loop_end:
         jr $ra                   # return 
 
 
-  draw_arrows:
-    # TODO: Implement this function
+  
+
+draw_arrows:
     # draws arrow based on player pos s2 going up until it hits a bubble in Current_grid
-    # ideally takes an input a0 that toggles if the arrows are up or down
-    # probably want to use helper function get_fool_grid_pos, also implement a draw_arrow (singular) function with an input pixel, 
-    #then just iterate through the current_grid
+    # will draw arrows facing up or down depending on s1 (bubbles held)
+    # uses helper functions get_fool_grid_pos and get_lowest_bubble_grid_pos, which use t0-3
+    # temporaries: t9 = first block to draw arrows in, t8 = last block to draw arrows in
     
+    # push ra to stack
+    addi $sp, $sp, -4          # moves stack pointer a word
+    sw $ra 0($sp)              # push a word onto the stack
+
+    jal get_fool_grid_pos      # gets fool grid position into v0 
+    addi $t9 $v0 0             # set t9 to start grid pos 
+    jal get_lowest_bubble_grid_pos    # sets v0 to position of the lowest bubble, v1 to 1 if none is found and 0 if it exists
+    addi $t8 $v0 0             # set t8 to end grid pos 
+    sub $t8 $t8 $v1            # if a bubble is found, this does nothing. If no bubble is found, then we decrement the ending index by one 
+
+    draw_arrows_loop:
+      ble $t9 $t8 end_draw_arrows        # if the index we want to draw arrows to is above or at the ending index, we end the loop
+      addi $a0 $t9 0                     # set a0 to the grid pos we want to draw to 
+      jal draw_arrow_block               # draws a block of arrows 
+      addi $t9 $t9 -28                   # decrement grid pos down a row
+      j draw_arrows_loop
     
+    end_draw_arrows:
+    # pull ra from stack 
+    lw $ra, 0($sp)           # load old ra to new $ra from stack
+    addi $sp, $sp, 4         # moves the stack pointer up 4
+
+    jr $ra                   # return 
+
+
+draw_arrow_block:
+    # function to fill a given block with arrows 
+    # takes parameters a0 = block of current grid to draw to
+    
+    # push ra to stack
+    addi $sp, $sp, -4          # moves stack pointer a word
+    sw $ra 0($sp)              # push a word onto the stack
+
+    jal get_pixel_from_grid    # stores the top left pixel value of a0 into v0 (assume a0 is already declared as input)
+    addi $a0 $v0 12            # centers a0 to top center of the given block 
+    addi $a0 $a0 512          # moves the index down two rows 
+    jal draw_arrow             # draws an arrow at the given position
+    addi $a0 $a0 2048          # moves the index down three rows 
+    jal draw_arrow             # draws an arrow at the given position
+
+    # pull ra from stack 
+    lw $ra, 0($sp)           # load old ra to new $ra from stack
+    addi $sp, $sp, 4         # moves the stack pointer up 4
+
+    jr $ra                   # return 
+
+draw_arrow:
+  # helper function to draw a single arrow centered at a given address of the bitmap (left centered, i.e. in 0-31, would be 15)
+  # takes inputs: a0 = address of the centermost top pixel
+  # temporaries: t0 = address to write to, t1 = color, t2 up/down (-512 for pointing down, 0 for pointing up)
+  # saves: s1, checks if holding
+  # PRECONDITION cannot be outside valid range or gonna get errors (valid range for bitmap)
+
+  addi $t0 $a0 0              # set to to starting address 
+  lw $t1 COLOR_ARROW         # set t1 to arrow color 
+
+
+  # check if going up or down
+  bne $s1 0 draw_arrow_pointing_up
+  li $t2 -512
+  j start_drawing_arrow
+
+  draw_arrow_pointing_up:
+  li $t2 0
+  j start_drawing_arrow
+
+  start_drawing_arrow:
+  sw $t1 0($t0)               # store color in bitmap
+  addi $t0 $t0 4              # shift address
+  sw $t1 0($t0)               # store color in bitmap
+  addi $t0 $t0 512              # shift address
+  sw $t1 0($t0)               # store color in bitmap
+  addi $t0 $t0 -4              # shift address
+  sw $t1 0($t0)               # store color in bitmap
+
+  addi $t0 $t0 -4              # shift address
+  add $t0 $t0 $t2             # move index up or stay in place
+  sw $t1 0($t0)               # store color in bitmap
+  addi $t0 $t0 12             # shift address
+  sw $t1 0($t0)               # store color in bitmap
+
+
+    
+
+  jr $ra                      # return
+
 
 
 
@@ -635,16 +754,21 @@ shift_down_by_two:
 initialize_s_vals:
   # function to initialize s values
   # Only initializes the simple ones, others have their own methods
-  # s0 = GRID_TEMPLATE (externally handled)
-  # s1 = CURRENT_GRID (externally handled)
-  # s2 = CHARACTER_POS (externally handled)
-  # s3 = CHARACTER_BOUND_LEFT (externally handled)
-  # s4 = CHARACTER_BOUND_RIGHT (externally handled)
+  # SAVED REGISTERS 
+  # s0 = CHACACTER_POS_2 (external)
+  # s1 = BUBBLES_HELD_1 
+  # s2 = CHARACTER_POS_1 (external)
+  # s3 = BUBBLES_HELD_2
+  # s4 = HELD_COLOR_1 
   # s5 = IS_PAUSED 
   # s6 = TICK_TIME
-
+  # s7 = HELD_COLOR_2
+  li $s1 0        # set s6 to 0 
+  li $s3 0        # set s6 to 0 
+  lw $s4 BACKGROUND_COLOR        # set s4 to BACKGROUND_COLOR
   li $s5 0        # set s5 to 0
   li $s6 0        # set s6 to 0 
+  lw $s7 BACKGROUND_COLOR        # set s7 to BACKGROUND_COLOR
   jr $ra          # return
   
 
@@ -719,11 +843,13 @@ get_random_color:
 get_fool_grid_pos:
   # helper function to return the bottommost index of the column that the fool is standing in from CURRENT_GRID
   # returns that value (364, 368, 372, 376, 380, 384, 388) in v0
-  # temporaries: t0 = potential positions
+  # temporaries: t0 = potential positions, t1 current grid 
+
+  la $t1 CURRENT_GRID
 
   #could be implemented with a loop, writing it out is faster though, involves shifting and math (could optimize this later though)
-  addi $t0 $s3 0           # set t0 to leftmost position
-  beq $s2 $t0 get_pos_0
+  lw $t0 PLAYER_1_BOUND_LEFT         # set left position 
+  beq $s2 $t0 get_pos_0              # check through all possible positions ... 
   addi $t0 $t0 32
   beq $s2 $t0 get_pos_1
   addi $t0 $t0 32
@@ -739,40 +865,98 @@ get_fool_grid_pos:
   addi $t0 $t0 32
 
   get_pos_0:
-    addi $v0 $s1 364       # set value to appropriate position
+    addi $v0 $t1 364       # set value to appropriate position
     jr $ra                 # return
   get_pos_1:
-    addi $v0 $s1 368       # set value to appropriate position
+    addi $v0 $t1 368       # set value to appropriate position
     jr $ra                 # return
   get_pos_2:
-    addi $v0 $s1 372       # set value to appropriate position
+    addi $v0 $t1 372       # set value to appropriate position
     jr $ra                 # return
   get_pos_3:
-    addi $v0 $s1 376       # set value to appropriate position
+    addi $v0 $t1 376       # set value to appropriate position
     jr $ra                 # return
   get_pos_4:
-    addi $v0 $s1 380       # set value to appropriate position
+    addi $v0 $t1 380       # set value to appropriate position
     jr $ra                 # return
   get_pos_5:
-    addi $v0 $s1 384       # set value to appropriate position
+    addi $v0 $t1 384       # set value to appropriate position
     jr $ra                 # return
   get_pos_6:
-    addi $v0 $s1 388       # set value to appropriate position
+    addi $v0 $t1 388       # set value to appropriate position
     jr $ra                 # return
+
+
+
+get_lowest_bubble_grid_pos:
+  # function to fetch the grid position of the lowest bubble above the fool 
+  # returns that value in v0, returns 0 in v1 if there is a bubble and 1 if none is found, returns pixel value in v2
+  # temporaries: t0 = grid color checked t1 = background color t2 = grid color stored, t3 = min val 
+
+  # push ra to stack
+  addi $sp, $sp, -4          # moves stack pointer a word
+  sw $ra 0($sp)              # push a word onto the stack
+
+  jal get_fool_grid_pos      # fetch the grid position of the fool into v0
+  lw $t1 BACKGROUND_COLOR    # store background color into t1 
+  la $t3 CURRENT_GRID        # load current grid to t3 
+  lw $t3 0($t3)              # store minimum value of current_grid in t3
+  addi $t0 $v0 0             # set t0 to grid position above the fool 
+
+  check_lowest_bubble_loop:
+    lw $t2 0($t0)            # load the color stored in current_grid into t2
+    bne $t1 $t2 return_lowest_bubble         # if the value is not the background color, return the position 
+    addi $t0 $t0 -28         # shift the place we're checking down by 28 
+    blt $t0 $t3 return_empty_lowest_bubble   # check if it's out of bounds 
+    j check_lowest_bubble_loop
+
+  return_lowest_bubble:
+    li $v1 0                # set v1 to 0, indicating we found a bubble (or we did not find nothing)
+    addi $v0 $t0 0          # set v0 to value that has a bubble 
+    j end_lowest_bubble 
+  
+  return_empty_lowest_bubble:
+    addi $t0 $t0 28         # shift the index back to the top row
+    li $v1 1                # set v1 to 1, meaning no bubble is found (or emptiness was found)
+    addi $v0 $t0 0          # set v0 to top row above the fool 
+    j end_lowest_bubble
     
-  
 
-  
+  end_lowest_bubble:
+    # pull ra from stack 
+    lw $ra, 0($sp)           # load old ra to new $ra from stack
+    addi $sp, $sp, 4         # moves the stack pointer up 4
 
+    jr $ra 
+
+
+get_pixel_from_grid:
+  # function to get the pixel position of the top left corner of a given CURRENT_GRID slot (using grid template)
+  # takes parameter a0 = current_grid index
+  # returns v0 = pixel pos
+  # temporaries: t0 = a0 grid index, t1 = start of current grid, t2 = return value address
+
+  la $t0 GRID_TEMPLATE       # load t0 with grid template 
+  la $t1 CURRENT_GRID        # load t1 with current grid 
+  sub $t2 $a0 $t1            # set t2 to the difference between the parameter and the current grid start 
+  add $t2 $t2 $t0            # add that difference (t2) to the start of grid template
+  lw $v0 0($t2)              # load the pixel pos stored in grid template at the address t2 
+
+  # move $a0 $v0
+  # lw $a1 COLOR_SHEEN
+  # jal draw_bubble
+  
+  jr $ra                     # return 
+  
 
 check_game_over:
   # function to check of the game ends
   # temporaries: t3 = bottom right, t4 = background color, t5 = addressed color, t6 = loop end condition
   
-    la $s1 CURRENT_GRID        # ensure s1 has correct persistent data, CURRENT_GRID address 
-    addi $t3 $s1 388           # set $t3 to s1 bottom right
+    la $t3 CURRENT_GRID        # load current grid to t3 
+    addi $t6 $t3 364           # set t6 to loop end condition
+    addi $t3 $t3 388           # set $t3 to bottom right
     lw $t4 BACKGROUND_COLOR    # set t4 to background color
-    addi $t6 $s1 336           # set t6 to loop end condition
     
     check_game_over_loop:
         lw $t5 0($t3)          # set t5 to color of t4's bubble
@@ -785,7 +969,7 @@ check_game_over:
         jr $ra                   # return 
 
     check_game_over_is_over:
-      jal shift_down_by_two
+      jal shift_down_by_one
       j game_over
       
 
@@ -826,6 +1010,7 @@ check_keyboard_input:
       j end_check_keyboard_input      # end
 
     p_pressed:
+      #TODO implement this function (or helper functions, need to display a paused message somehow)
       # sub function handling the case when keyboard input is p
       # pauses the game
       # toggles s5 between 0 and 1
@@ -850,9 +1035,11 @@ check_keyboard_input:
     a_pressed:
       # function to handle when a key is pressed
       # moves player_pos left by 32, if does not exceed the bound
-      # temporaries: t0 = s2 - 32, = player pos - 32
+      # temporaries: t0 = s2 - 32, = player pos - 32, t1 = left bound
+
+      lw $t1 PLAYER_1_BOUND_LEFT    # set t1 to left bound 
       addi $t0 $s2 -32              # set t0 to playerpos - 32
-      bge $t0 $s3 move_fool_left    # check if moving left takes the fool beyond the border
+      bge $t0 $t1 move_fool_left    # check if moving left takes the fool beyond the border
       j end_check_keyboard_input    # end keyboard input
       move_fool_left:
       # push ra to stack
@@ -872,9 +1059,11 @@ check_keyboard_input:
     d_pressed:
       # function to handle when d key is pressed
       # moves player_pos right by 32, if does not exceed the bound
-      # temporaries: t0 = s2 + 32, = player pos + 32
+      # temporaries: t0 = s2 + 32, = player pos + 32, t1 = right bound 
+
+      lw $t1 PLAYER_1_BOUND_RIGHT   # set right bound to t1 
       addi $t0 $s2 32               # set t0 to playerpos + 32
-      ble $t0 $s4 move_fool_right   # check if moving left takes the fool beyond the border
+      ble $t0 $t1 move_fool_right   # check if moving left takes the fool beyond the border
       j end_check_keyboard_input    # end keyboard input
       move_fool_right:
       # push ra to stack
@@ -893,23 +1082,77 @@ check_keyboard_input:
 
   w_pressed:
     # TODO: implement throw control
+      # push ra to stack
+      addi $sp, $sp, -4          # moves stack pointer a word
+      sw $ra 0($sp)              # push a word onto the stack
+
+      li $s1 0                   # sets BUBBLES_HELD to 0
+
+      jal get_lowest_bubble_grid_pos     # returns grid pos in v0, returns 0 in v1 if there is a bubble 
+
+
+      no_bubble_found:
+      
+      # pull ra from stack 
+      lw $ra, 0($sp)           # load old ra to new $ra from stack
+      addi $sp, $sp, 4         # moves the stack pointer up 4
+
     j end_check_keyboard_input    # end keyboard input 
 
 
   s_pressed:
-    # TODO: implement grab control
+    # TODO: implement grab control 
 
-    #get grid pos of lowest bubble, if there is a bubble
-    
-    
-    # check what color the lowest ball is
-    j end_check_keyboard_input    # end keyboard input 
+      # v0 is current grid position(column * 7)
+      # v1 is 0 if there is a bubble in the column
+      # $t4 is background color
+      # $t5 is grid_base
+      # $t6 is lowest bubble color
 
+      addi $sp, $sp, -4          # moves stack pointer a word
+      sw $ra 0($sp)              # push a word onto the stack
 
+      jal get_lowest_bubble_grid_pos
+      
+      bne $v1 $zero grab_done #if there is no bubble in the column, exit
+
+      lw  $t6 0($v0)            # get color of the lowest bubble
+      
+      bne $s1 $zero check_colors_match # if already holding a bubble, check if colors match
+
+      # if no bubbles are held
+      addi $s4 $t6 0            # set grabbing color to color of lowest bubble
+      j grab_setup # if not holding a bubble, grab bubbles
+
+    check_colors_match:
+      bne $t6 $s4 grab_done    #  if, different color, exit
+
+    grab_setup:
+      lw $t4 BACKGROUND_COLOR          # t4 = background color
+      la $t5 CURRENT_GRID              # t5 = grid base (upper bound)
+
+    # goes up to see if others in column touching are same color
+    grab_loop:
+      lw  $t6 0($v0)                   # get xcolor of the current slot
+      bne $t6 $s4 grab_done            # if color does not match current color, exit
+      sw  $t4 0($v0)                   # clear the slot
+      addi $s1 $s1 1                   # register one more bubble held
+      addi $v0 $v0 -28                 # go one row up
+      blt $v0 $t5 grab_done            # if past the top of the grid, exit
+      j grab_loop
+
+      # loads ra to be ra of caller of loop and not get_lowest_bubble, i.e. exit
+      grab_done:
+        # pull ra from stack 
+        lw $ra, 0($sp)           # load old ra to new $ra from stack
+        addi $sp, $sp, 4         # moves the stack pointer up 4
+  
+        j end_check_keyboard_input    # end keyboard input
+      
+      
 
 ##############################################################################
 # ...
 ##############################################################################
 
   
-
