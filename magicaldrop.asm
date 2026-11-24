@@ -33,7 +33,7 @@ SLEEP_TIME:
     .word 100
 # Tick time
 TICK_CYCLE:
-    .word 5000
+    .word 500
 # combo time 
 COMBO_TIME:
   .word 5
@@ -149,10 +149,13 @@ game_loop:
 
     lw $t0 TICK_CYCLE
     ble $s6 $t0 skip_down_shift
+
+    # shift down 
     li $s6 0
     jal check_game_over
     jal shift_down_by_one
-    jal fill_first_row_random    #just to see update time 
+    jal shift_bubblesqueue_by_one     # shift bubblesque
+    jal fill_first_row_random         # just to see update time 
   
     skip_down_shift:
     jal decrement_all_bubblesets      # decrement all bubblesets 
@@ -969,8 +972,9 @@ check_game_over:
     lw $t4 BACKGROUND_COLOR    # set t4 to background color
     
     check_game_over_loop:
-        lw $t5 0($t3)          # set t5 to color of t4's bubble
+        lw $t5 0($t3)          # set t5 to color of t3's bubble
         bne $t5 $t4 check_game_over_is_over       # if the color is not background, game is over
+        return_to_check_game_over_loop:           # for when we check bubblequeue membership 
         addi $t3 $t3 -4        # increment t3 by -4
         blt $t3 $t6 check_game_over_loop_end          # check if loop is over
         j check_game_over_loop    # restart loop
@@ -979,6 +983,23 @@ check_game_over:
         jr $ra                   # return 
 
     check_game_over_is_over:
+      # first check if index is in bubblesqueue 
+      addi $a0 $t3 0            # set a0 to t3 
+      
+      # push ra to stack
+      addi $sp, $sp, -4          # moves stack pointer a word
+      sw $ra 0($sp)              # push a word onto the stack
+
+      jal is_in_bubblesqueue     # stores into v0 0 if a0 is not in bubblequeue, 1 if it is
+
+      # pull ra from stack 
+      lw $ra, 0($sp)           # load old ra to new $ra from stack
+      addi $sp, $sp, 4         # moves the stack pointer up 4
+
+      beq $v0 $zero check_game_over_is_over_for_real
+      j return_to_check_game_over_loop
+
+      check_game_over_is_over_for_real:
       jal shift_down_by_one
       j game_over
       
@@ -1227,6 +1248,8 @@ check_keyboard_input:
   # add to add to the last bubbleset in the queue 
   # pop_last_bubbleset to delete the last bubbleset from the bubblequeue 
   # decrement_all which will decrement every pointer by 1, then remove any that reach zero 
+  # shift_all which shifts every grid pos value stored in the queue down by 1 row (+28)
+  # is_in_bubblesqueue, returns true (1) if a given value is stored, false (0) otherwise 
 
 reset_bubblequeue:
   # function to reset the bubblequeue
@@ -1234,11 +1257,11 @@ reset_bubblequeue:
 
   la $t0 PLAYER_1_BUBBLESQUEUE
   addi $t1 $t0 392
-  clear_bubblequeue_loop:
+  reset_bubblesqueue_loop:
     sw $zero 0($t0)
     addi $t0 $t0 4
     bge $t0 $t1 end_clear_bubblequeue_loop
-    j clear_bubblequeue_loop
+    j reset_bubblesqueue_loop
     
   end_clear_bubblequeue_loop:
   jr $ra 
@@ -1338,7 +1361,7 @@ decrement_all_bubblesets:
   # function to decrement all bubblesets by 1, and if the pointer reaches 1 then clear it out and move everything forward 
   # temporaries: t0 = BUBBLESQUEUE index, t1 = end condition, t2 = COMBOTIME/shiftindex, t3 = val at index, t4 = erase this section 
   # t5 = shift magnitude (relies on assumption that bubblesets are put into the queue in correct order, that is pointer[i] < pointer[i+1] for all i)
-  # t6 = background color
+  # t6 = background color, t7 = curr grid upper bound 
   
     la $t0 PLAYER_1_BUBBLESQUEUE    # load bubblesqueue to t0
     addi $t1 $t0 392                # set end index to t1 
@@ -1346,10 +1369,12 @@ decrement_all_bubblesets:
     li $t4 0                        # set t4 to 0 
     li $t5 0                        # set t5 to 1 (because it will be incremented x times where x is the number of pops, + 1 for the pointer)
     lw $t6 BACKGROUND_COLOR         # set t6 to background color 
+    la $t7 CURRENT_GRID             # set t7 to curr grid 
+    addi $t7 $t7 392                # set t7 to upper bound 
     
     decrement_bubblesets_loop:
       bge $t0 $t1 decrement_bubblesets_loop_end     # if index reaches end loop condition, end loop 
-      lw $t3 0($t0)                 # load the value at index t3 to t0 
+      lw $t3 0($t0)                 # load the value at index t0 to t3
       bgt $t3 $t2 skip_decrement_pointer  # if the value is greater than combo val, so if it is not a pointer or a zero, skip decrement 
       ble $t3 $zero leave_bubbleval_alone #if the value is less than or equal to zero, skip decrement 
       j decrement_pointer      # else decrement  
@@ -1373,7 +1398,10 @@ decrement_all_bubblesets:
         j erase_bubbleval
         erase_bubbleval:
           lw $t3 0($t0)
-          sw $t6 0($t3)
+          # check if index is out of bounds 
+          bge $t3 $t7 bubble_oob             # if t3 (value stored in bubble queue) is greater than upper limits of curr grid, we do not write anything to it 
+            sw $t6 0($t3)
+          bubble_oob: # out of bounds 
           sw $zero 0($t0)
           addi $t0 $t0 4
           addi $t5 $t5 4
@@ -1396,9 +1424,60 @@ decrement_all_bubblesets:
       j shift_bubblesque_loop                     # loop 
       
     end_shift_bubblesque_loop:
+      jr $ra 
 
-    jr $ra 
 
+shift_bubblesqueue_by_one:
+  # function to shift everything stored down by 1 to avoid issues with shifting
+  # temporaries: t0 = index of queue, t1 = end condition, t2 = combo time, t3 = stored value at index 
+
+    la $t0 PLAYER_1_BUBBLESQUEUE    # load bubblesqueue to t0
+    addi $t1 $t0 392                # set end index to t1 
+    lw $t2 COMBO_TIME               # set combotime to t2
+
+    shift_bubbles_by_one_loop:
+      bge $t0 $t1 end_shift_bubbles_by_one_loop     # if index reaches end loop condition, end loop 
+      lw $t3 0($t0)                     # load the value at index t0 to t3
+      ble $t3 $t2 skip_bubble_shift     # if the value is less than or equal to combo val, so if it is a pointer or a zero, skip shift  
+      j shift_bubble_down_one
+
+      skip_bubble_shift:
+        addi $t0 $t0 4                  # increment t0 
+        j shift_bubbles_by_one_loop
+        
+      shift_bubble_down_one:
+        lw $t3 0($t0)                   # load t3 to t0 
+        addi $t3 $t3 28                 # add 28 to the value at t3 (shifting down a row)
+        sw $t3 0($t0)                   # store updated value to bubblesqueue 
+        addi $t0 $t0 4                  # increment t0 
+        j shift_bubbles_by_one_loop
+  
+    end_shift_bubbles_by_one_loop:
+        jr $ra 
+
+
+is_in_bubblesqueue:
+  # function to check if a given value (a0) is stored in the bubblesqueue
+  # input: a0, somewhere in current_grid
+  # output: v0, 0 if false, 1 if true 
+  # temporaries t0 = index, t1 = end condition, t2 = stored value at index 
+
+  la $t0 PLAYER_1_BUBBLESQUEUE   # set t0 to index 
+  addi $t1 $t0 392               # set t1 to end condition 
+  li $v0 0                       # set v0 to 0 
+  check_bubblequeue_membership_loop:
+    bge $t0 $t1 end_check_bubblequeue_loop
+    lw $t2 0($t0)
+    beq $t2 $a0 in_bubblesqueue_true
+    addi $t0 $t0 4
+    j check_bubblequeue_membership_loop
+
+  in_bubblesqueue_true:
+    li $v0 1                   # load 1 to v0 
+    j end_check_bubblequeue_loop
+      
+  end_check_bubblequeue_loop:
+  jr $ra 
 
   
 
