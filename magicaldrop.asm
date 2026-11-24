@@ -33,10 +33,7 @@ SLEEP_TIME:
     .word 100
 # Tick time
 TICK_CYCLE:
-    .word 5000
-# combo time 
-COMBO_TIME:
-  .word 5
+    .word 3000
 
 # Grid template - Stores 7 x 14 words, each representing the top left corner of one of the bubbles in the grid 
 .align 2
@@ -60,10 +57,6 @@ PLAYER_1_BOUND_LEFT:
   .word 0
 PLAYER_1_BOUND_RIGHT:
   .word 0
-
-# Bubbles to pop: this is an array storing a timer followed by a series of bubbles to pop (grid positions in current grid) 
-PLAYER_1_BUBBLESQUEUE:
-  .space 392
 
 # Colors
 BACKGROUND_COLOR:
@@ -126,7 +119,7 @@ main:
   # temporaries - t0 is used briefly for loading tick_cycle
     # Initialize the game
     jal initialize_s_vals           # initialize s values 
-    jal reset_bubblequeue           # clear bubble array to 0s
+
     jal build_grid_template         # build grid template in memory 
     
     jal draw_background             # call the draw background function
@@ -155,7 +148,6 @@ game_loop:
     jal fill_first_row_random    #just to see update time 
   
     skip_down_shift:
-    jal decrement_all_bubblesets      # decrement all bubblesets 
     jal update_board                  # update the board 
     jal draw_arrows
 
@@ -771,17 +763,12 @@ initialize_s_vals:
   # s5 = IS_PAUSED 
   # s6 = TICK_TIME
   # s7 = HELD_COLOR_2
-  li $s1 0        # set s1 to 0 
-  li $s3 0        # set s3 to 0 
+  li $s1 0        # set s6 to 0 
+  li $s3 0        # set s6 to 0 
   lw $s4 BACKGROUND_COLOR        # set s4 to BACKGROUND_COLOR
   li $s5 0        # set s5 to 0
   li $s6 0        # set s6 to 0 
   lw $s7 BACKGROUND_COLOR        # set s7 to BACKGROUND_COLOR
-
-# for testing purposes (TODO: DELETE)
-  lw $s4 COLOR_RED
-  # li $s1 8
-  
   jr $ra          # return
   
 
@@ -954,10 +941,13 @@ get_pixel_from_grid:
   sub $t2 $a0 $t1            # set t2 to the difference between the parameter and the current grid start 
   add $t2 $t2 $t0            # add that difference (t2) to the start of grid template
   lw $v0 0($t2)              # load the pixel pos stored in grid template at the address t2 
+
+  # move $a0 $v0
+  # lw $a1 COLOR_SHEEN
+  # jal draw_bubble
   
   jr $ra                     # return 
-
-
+  
 
 check_game_over:
   # function to check of the game ends
@@ -1091,70 +1081,18 @@ check_keyboard_input:
       j end_check_keyboard_input    # end keyboard input 
 
   w_pressed:
-    # function for when w is pressed, the 'throw' function
-    # Should throw all bubbles being held straight up and line them up vertically, then check for a three in a row 
-    # uses helper function get_lowest_bubble_grid_pos, which uses t0-3
-    # saves: s1 (bubbles held) s4 (held color)
-    # temporaries t0 = bubble grid pos, t6 = grid position of upper bubbles, 
-    # t7 = color checker also 3, t8 = lower/upper bound loop end condition, t9 = bubbles in a row
-    
+    # TODO: implement throw control
       # push ra to stack
       addi $sp, $sp, -4          # moves stack pointer a word
       sw $ra 0($sp)              # push a word onto the stack
 
-      la $t8 CURRENT_GRID        # load current grid to t1 (bound for counting upper bubbles)
-      li $t9 0                   # set t9 to 0 
+      li $s1 0                   # sets BUBBLES_HELD to 0
 
-      # end if not holding anything 
-      beq $s1 $zero w_pressed_end      # if not holding any bubbles, end 
+      jal get_lowest_bubble_grid_pos     # returns grid pos in v0, returns 0 in v1 if there is a bubble 
 
-      # start a bubbleset (uses t0-2)
-      jal push_bubbleset
 
-      # check bubbles above lowest index for matches
-      jal get_lowest_bubble_grid_pos      # returns grid pos in v0, returns 0 in v1 if there is a bubble 
-      addi $t6 $v0 0                      # set t6 to grid pos of lowest bubble 
-        
-      count_bubbles_above_loop:
-        bne $v1 0 start_throwing_bubbles     # if there are no bubbles above, end 
-        blt $t6 $t8 start_throwing_bubbles   # if the index goes out of bounds, end 
-        lw $t7 0($t6)                        # load the color of the lowest bubble into t7
-        bne $t7 $s4 start_throwing_bubbles   # if the lowest bubble doesn't match colors with the held bubble, irrelevant, end loop
-        addi $t9 $t9 1                       # increment t9 by 1 
-        addi $a0 $t6 0                       # set a0 to t6
-        jal add_to_bubbleset                 # add a0 to bubbleset 
-        addi $t6 $t6 -28                     # decrement t6 to next row 
-        j count_bubbles_above_loop
-        
-
-      #check how many bubbles to throw
-      start_throwing_bubbles:
-      addi $t8 $t8 388           # set out of bounds potential 
-      jal get_lowest_bubble_grid_pos      # returns grid pos in v0, returns 0 in v1 if there is a bubble 
-      addi $t6 $v0 0             # set t6 to grid pos of lowest bubble 
-
-      throw_bubble_loop:
-        beq $s1 $zero throw_bubble_loop_end      # if not holding any bubbles, end 
-        addi $t9 $t9 1           # increment t9 by 1
-        addi $s1 $s1 -1          # decrement s1 by 1 
-        addi $t6 $t6 28          # shift t6 to index of next row 
-        addi $a0 $t6 0           # set a0 to t6
-        jal add_to_bubbleset     # add a0 to bubbleset
-        bgt $t6 $t8 throw_bubble_loop    # if at the bottom of the grid, continue with the loop but do not draw anything new 
-        sw $s4 0($t6)            # throw the bubble (store it in current grid)
-        j throw_bubble_loop
+      no_bubble_found:
       
-      throw_bubble_loop_end:
-        li $t7 3               # set t7 to 3
-        bge $t9 $t7 pop_some_bubbles    # if 3 or more in a row are found, pop some bubbles 
-        jal pop_last_bubbleset          # else, pop the last bubbleset we started 
-        j w_pressed_end                 # jump to end 
-
-      pop_some_bubbles:
-        # this is now handled by the bubbleset and game update (in theory at least...)
-        j w_pressed_end
-
-      w_pressed_end:
       # pull ra from stack 
       lw $ra, 0($sp)           # load old ra to new $ra from stack
       addi $sp, $sp, 4         # moves the stack pointer up 4
@@ -1176,10 +1114,6 @@ check_keyboard_input:
 
       jal get_lowest_bubble_grid_pos
       
-      bne $v1 $zero grab_done #if there is no bubble in the column, exit
-
-      lw  $t6 0($v0)            # get color of the lowest bubble
-      
       bne $s1 $zero check_colors_match # if already holding a bubble, check if colors match
 
       # if no bubbles are held
@@ -1195,7 +1129,7 @@ check_keyboard_input:
 
     # goes up to see if others in column touching are same color
     grab_loop:
-      lw  $t6 0($v0)                   # get xcolor of the current slot
+      lw  $t6 0($v0)                   # get xcolor of the current slotdsd
       bne $t6 $s4 grab_done            # if color does not match current color, exit
       sw  $t4 0($v0)                   # clear the slot
       addi $s1 $s1 1                   # register one more bubble held
@@ -1214,192 +1148,7 @@ check_keyboard_input:
       
 
 ##############################################################################
- # Popping Bubble Functions
+# ...
 ##############################################################################
 
-# these functions deal with BUBBLES_TO_POP data object, which we will treat as a queue, call it bubblequeue
-# BUBBLES_TO_POP is a queue, where each item is a set of grid indexes to pop with a pointer equal to Combo_time or below... call this set a bubbleset
-# operates under the assumption that everything stored in a given bubbleset is greater than the pointer value (COMBO_TIME)
-# consider this section a class containing methods to handle this strange queue... 
-  # reset to reset everything
-  # get_queue_beginning to return the index of the first zero, aka the start of the queue 
-  # push to start a new bubbleset 
-  # add to add to the last bubbleset in the queue 
-  # pop_last_bubbleset to delete the last bubbleset from the bubblequeue 
-  # decrement_all which will decrement every pointer by 1, then remove any that reach zero 
-
-reset_bubblequeue:
-  # function to reset the bubblequeue
-  # temporaries: t0 = BUBBLESQUEUE, t1 = end condition
-
-  la $t0 PLAYER_1_BUBBLESQUEUE
-  addi $t1 $t0 392
-  clear_bubblequeue_loop:
-    sw $zero 0($t0)
-    addi $t0 $t0 4
-    bge $t0 $t1 end_clear_bubblequeue_loop
-    j clear_bubblequeue_loop
-    
-  end_clear_bubblequeue_loop:
-  jr $ra 
-
-
-get_queue_beginning:
-  # function to return the start of the queue, aka the first zero
-  # returns that value in v0 
-  # temporaries: t0 = BUBBLESQUEUE, t1 = end condition, t2 = value
-
-  la $t0 PLAYER_1_BUBBLESQUEUE
-  addi $t1 $t0 392
-  get_queue_beginning_loop:
-    lw $t2 0($t0)                           # load the value at t2 in bubblequeue 
-    beq $t2 $zero end_get_queue_beginning_loop   # return if found a zero 
-    addi $t0 $t0 4                               # increment t4 
-    bge $t0 $t1 end_clear_bubblequeue_loop       # if go out of bounds... there's an error, but end loop anyway 
-    j get_queue_beginning_loop
-    
-  end_get_queue_beginning_loop:
-    addi $v0 $t0 0             # set v0 to t0 
-    jr $ra 
-
-
-push_bubbleset:
-  # function to start a new bubbleset 
-  # calls helper function get_queue_beginning, which uses t0-2
-  # temporaries: t0 = COMBO_TIME (ok to reuse)
   
-    # push ra onto stack 
-    addi $sp, $sp, -4          # moves stack pointer a word
-    sw $ra 0($sp)              # push a word onto the stack
-
-    jal get_queue_beginning    # get beginning of the queue into v0 
-    lw $t0 COMBO_TIME
-    sw $t0 0($v0)              # store combo time into the beginning of the stack 
-
-    # pull ra from stack 
-    lw $ra, 0($sp)           # load old ra to new $ra from stack
-    addi $sp, $sp, 4         # moves the stack pointer up 4
-
-    jr $ra 
-
-
-add_to_bubbleset:
-  # function to add to the bubbleset at the end of the queue 
-  # takes input parameter a0 = grid pos being added 
-  # calls helper function get_queue_beginning, which uses t0-2
-  
-    # push ra onto stack 
-    addi $sp, $sp, -4          # moves stack pointer a word
-    sw $ra 0($sp)              # push a word onto the stack
-
-    jal get_queue_beginning    # get beginning of the queue into v0 
-    sw $a0 0($v0)              # store combo time into the beginning of the stack 
-
-    # pull ra from stack 
-    lw $ra, 0($sp)           # load old ra to new $ra from stack
-    addi $sp, $sp, 4         # moves the stack pointer up 4
-
-    jr $ra 
-
-pop_last_bubbleset:
-  # function to delete the last bubbleset
-  # calls helper function get_queue_beginning, which uses t0-2
-  # temporaries: t0 = index, t1 = COMBO_TIME, t2 = value at index, t3 = BUBBLESQUEUE (should be redundant, just a backup really)
-  
-    # push ra onto stack 
-    addi $sp, $sp, -4          # moves stack pointer a word
-    sw $ra 0($sp)              # push a word onto the stack
-
-    jal get_queue_beginning    # get beginning of the queue into v0 
-    addi $t0 $v0 0             # set t0 to v0
-    lw $t1 COMBO_TIME          # set t1 to combo time 
-    la $t3 PLAYER_1_BUBBLESQUEUE   # set t3 to bubblesqueue 
-    pop_last_bubbleset_loop:
-      addi $t0 $t0 -4           # decrement t0 by 1 place
-      lw $t2 0($t0)             # set t2 to the value at t0
-      ble $t0 $t3 end_pop_last_bubbleset             # if the index is less than the endin
-      blt $t2 $t1 finish_pop_last_bubbleset_loop     # if t2 (value at index) is less than or equal to combo time, finish loop
-      sw $zero 0($t0)
-      j pop_last_bubbleset_loop
-      
-
-    finish_pop_last_bubbleset_loop:
-      sw $zero 0($t0)
-    
-    end_pop_last_bubbleset:
-      
-    lw $ra, 0($sp)           # load old ra to new $ra from stack
-    addi $sp, $sp, 4         # moves the stack pointer up 4
-
-    jr $ra 
-
-
-decrement_all_bubblesets:
-  # function to decrement all bubblesets by 1, and if the pointer reaches 1 then clear it out and move everything forward 
-  # temporaries: t0 = BUBBLESQUEUE index, t1 = end condition, t2 = COMBOTIME/shiftindex, t3 = val at index, t4 = erase this section 
-  # t5 = shift magnitude (relies on assumption that bubblesets are put into the queue in correct order, that is pointer[i] < pointer[i+1] for all i)
-  # t6 = background color
-  
-    la $t0 PLAYER_1_BUBBLESQUEUE    # load bubblesqueue to t0
-    addi $t1 $t0 392                # set end index to t1 
-    lw $t2 COMBO_TIME               # set combotime to t2
-    li $t4 0                        # set t4 to 0 
-    li $t5 0                        # set t5 to 1 (because it will be incremented x times where x is the number of pops, + 1 for the pointer)
-    lw $t6 BACKGROUND_COLOR         # set t6 to background color 
-    
-    decrement_bubblesets_loop:
-      bge $t0 $t1 decrement_bubblesets_loop_end     # if index reaches end loop condition, end loop 
-      lw $t3 0($t0)                 # load the value at index t3 to t0 
-      bgt $t3 $t2 skip_decrement_pointer  # if the value is greater than combo val, so if it is not a pointer or a zero, skip decrement 
-      ble $t3 $zero leave_bubbleval_alone #if the value is less than or equal to zero, skip decrement 
-      j decrement_pointer      # else decrement  
-      
-      decrement_pointer:
-          addi $t3 $t3 -1               # decrement the pointer
-          sw $t3 0($t0)                 # store the decremented pointer 
-          beq $t3 $zero set_erase_bubbleset_true     # if we just decremented pointer to zero, we will erase the next values until reaching a pointer (set t4 to 1)
-          j set_erase_bubbleset_false    
-          set_erase_bubbleset_true:
-            li $t4 1                       # set t4 to 1 
-            addi $t0 $t0 4                 # increment t0
-            addi $t5 $t5 4                 # increment t5 
-            j decrement_bubblesets_loop
-          set_erase_bubbleset_false:
-            li $t4 0
-            addi $t0 $t0 4
-            j decrement_bubblesets_loop
-      skip_decrement_pointer:
-        beq $t4 $zero leave_bubbleval_alone
-        j erase_bubbleval
-        erase_bubbleval:
-          lw $t3 0($t0)
-          sw $t6 0($t3)
-          sw $zero 0($t0)
-          addi $t0 $t0 4
-          addi $t5 $t5 4
-          j decrement_bubblesets_loop
-        leave_bubbleval_alone:
-          addi $t0 $t0 4
-          j decrement_bubblesets_loop
-      
-    decrement_bubblesets_loop_end:
-     # at this point we have erased and decremented, now we need to shift
-    
-    la $t0 PLAYER_1_BUBBLESQUEUE                  # load bubblesque into t0 
-    addi $t1 $t0 392                              # set t1 to end condition 
-    shift_bubblesque_loop:
-      add $t2 $t5 $t0                             # set t2 to the sum of t5 and t0 (t5 being the shift distance)
-      bge $t2 $t1 end_shift_bubblesque_loop       # if t2 is out of bounds, end loop... technically should set the next few to zero, but it shouldn't get this far ever 
-      lw $t3 0($t2)                               # set t3 to the value at t2 
-      sw $t3 0($t0)                               # set bubbleval at t0 to the value stored in t3 
-      addi $t0 $t0 4                              # increment t0 by 4 
-      j shift_bubblesque_loop                     # loop 
-      
-    end_shift_bubblesque_loop:
-
-    jr $ra 
-
-
-  
-
-
