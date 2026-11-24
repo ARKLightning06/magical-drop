@@ -2,7 +2,7 @@
 # This file contains our implementation of Magical Drop.
 #
 # Student 1: Andrew Koes, 1012691482
-# Student 2: Name, Student Number (if applicable)
+# Student 2: Andrew Li, 1012142441 (if applicable)
 #
 # We assert that the code submitted here is entirely our own 
 # creation, and will indicate otherwise when it is not.
