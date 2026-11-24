@@ -33,7 +33,7 @@ SLEEP_TIME:
     .word 100
 # Tick time
 TICK_CYCLE:
-    .word 500
+    .word 3000
 
 # Grid template - Stores 7 x 14 words, each representing the top left corner of one of the bubbles in the grid 
 .align 2
@@ -1102,27 +1102,57 @@ check_keyboard_input:
 
   s_pressed:
     # TODO: implement grab control 
-    # should use helper method get_lowest_bubble_grid_pos
+
+      # v0 is current grid position(column * 7)
+      # v1 is 0 if there is a bubble in the column
+      # $t4 is background color
+      # $t5 is grid_base
+      # $t6 is lowest bubble color
+
       addi $sp, $sp, -4          # moves stack pointer a word
       sw $ra 0($sp)              # push a word onto the stack
 
-
-      li $s1 1                   # sets is_holding_bubbles to false 
+      jal get_lowest_bubble_grid_pos
       
+      bne $v1 $zero grab_done #if there is no bubble in the column, exit
 
-      # pull ra from stack 
-      lw $ra, 0($sp)           # load old ra to new $ra from stack
-      addi $sp, $sp, 4         # moves the stack pointer up 4
+      lw  $t6 0($v0)            # get color of the lowest bubble
+      
+      bne $s1 $zero check_colors_match # if already holding a bubble, check if colors match
 
+      # if no bubbles are held
+      addi $s4 $t6 0            # set grabbing color to color of lowest bubble
+      j grab_setup # if not holding a bubble, grab bubbles
 
+    check_colors_match:
+      bne $t6 $s4 grab_done    #  if, different color, exit
 
-    j end_check_keyboard_input    # end keyboard input 
+    grab_setup:
+      lw $t4 BACKGROUND_COLOR          # t4 = background color
+      la $t5 CURRENT_GRID              # t5 = grid base (upper bound)
 
+    # goes up to see if others in column touching are same color
+    grab_loop:
+      lw  $t6 0($v0)                   # get xcolor of the current slot
+      bne $t6 $s4 grab_done            # if color does not match current color, exit
+      sw  $t4 0($v0)                   # clear the slot
+      addi $s1 $s1 1                   # register one more bubble held
+      addi $v0 $v0 -28                 # go one row up
+      blt $v0 $t5 grab_done            # if past the top of the grid, exit
+      j grab_loop
 
+      # loads ra to be ra of caller of loop and not get_lowest_bubble, i.e. exit
+      grab_done:
+        # pull ra from stack 
+        lw $ra, 0($sp)           # load old ra to new $ra from stack
+        addi $sp, $sp, 4         # moves the stack pointer up 4
+  
+        j end_check_keyboard_input    # end keyboard input
+      
+      
 
 ##############################################################################
 # ...
 ##############################################################################
 
   
-
