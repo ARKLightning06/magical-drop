@@ -1051,6 +1051,8 @@ check_keyboard_input:
       # perform input check
       lw $t2, 4($t0)                  # Load second word from keyboard
       lw $t1, 0($t0)                  # Check if stack is empty
+    
+      
       beq $t1 1 keyboard_input        # loop until stack is empty
 
       beq $t2, 0x70, p_pressed        # Check if the key q was pressed
