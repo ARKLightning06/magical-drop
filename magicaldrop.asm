@@ -175,11 +175,13 @@ game_loop:
     jal shift_down_by_one
     jal shift_down_by_one_2
     jal shift_bubblesqueue_by_one     # shift bubblesque
+    jal shift_bubblesqueue_by_one_2     # shift bubblesque2
     jal fill_first_row_random         # just to see update time 
     jal fill_first_row_random_2
   
     skip_down_shift:
     jal decrement_all_bubblesets      # decrement all bubblesets 
+    jal decrement_all_bubblesets_2      # decrement all bubblesets 
     jal update_board                  # update the board 
     jal update_board_2
     jal draw_arrows
@@ -1034,7 +1036,7 @@ check_game_over:
 
 check_keyboard_input:
   # function for checking if a key has been pressed and which one
-  # temporaries: t0 = keyboard address, t1 = first word, t2 = second word, t3 = player1 action, t4 = player2 action
+  # temporaries: t0 = keyboard address, t1 = first word, t2 = second word, t3 = player1 action, t4 = player2 action, t5 = general action 
   
 	li 		$v0, 32                 # perfrom syscall 
 	li 		$a0, 1
@@ -1049,19 +1051,56 @@ check_keyboard_input:
 
     keyboard_input:
       # perform input check
-      lw $t2, 4($t0)                  # Load second word from keyboard
+      lw $t3, 4($t0)                  # Load second word from keyboard
       lw $t1, 0($t0)                  # Check if stack is empty
-    
-      
+
+      # store latest p1 input into t2 
+      beq $t3, 0x61, store_p1_input        # check if key a was pressed 
+      beq $t3, 0x64, store_p1_input        # check if key d was pressed 
+      beq $t3, 0x77, store_p1_input        # check if key w was pressed 
+      beq $t3, 0x73, store_p1_input        # check if key s was pressed 
+
+      # store latest p2 input into t4
+      beq $t3, 0x69, store_p2_input        # check if key i was pressed 
+      beq $t3, 0x6A, store_p2_input        # check if key j was pressed 
+      beq $t3, 0x6B, store_p2_input        # check if key k was pressed 
+      beq $t3, 0x6C, store_p2_input        # check if key l was pressed 
+
+      # store latest general input into t5 
+      beq $t3, 0x70, store_general_input        # Check if the key q was pressed
+      beq $t3, 0x71, store_general_input        # Check if the key q was pressed
+
+
+      store_p1_input:
+        addi $t2 $t3 0                # set t2 to t3
+        j continue_keyboard_input
+
+      store_p2_input:
+        addi $t4 $t3 0                # set t2 to t3
+        j continue_keyboard_input
+
+      store_general_input:
+        addi $t5 $t3 0                # set t5 to t3
+        j continue_keyboard_input
+
+      continue_keyboard_input:
       beq $t1 1 keyboard_input        # loop until stack is empty
 
-      beq $t2, 0x70, p_pressed        # Check if the key q was pressed
-      beq $t2, 0x71, q_pressed        # Check if the key q was pressed
+      process_general_inputs:
+      beq $t5, 0x70, p_pressed        # Check if the key q was pressed
+      beq $t5, 0x71, q_pressed        # Check if the key q was pressed
+
+      process_p1_inputs:
       beq $t2, 0x61, a_pressed        # check if key a was pressed 
       beq $t2, 0x64, d_pressed        # check if key d was pressed 
       beq $t2, 0x77, w_pressed        # check if key w was pressed 
       beq $t2, 0x73, s_pressed        # check if key s was pressed 
-      # ... check other keys 
+
+      process_p2_inputs:
+      beq $t4, 0x69, i_pressed         # check if key i was pressed 
+      beq $t4, 0x6A, j_pressed        # check if key j was pressed 
+      beq $t4, 0x6B, k_pressed        # check if key k was pressed 
+      beq $t4, 0x6C, l_pressed        # check if key l was pressed 
 
       j end_check_keyboard_input      # end
 
@@ -1077,11 +1116,11 @@ check_keyboard_input:
       li $t0 0                       # load 0 to t0
       beq $t0 $s5 p_pressed_pause    # check if t0 is equal to s5 (if s5 = 0, if game is not paused)
       li $s5 0
-      j end_check_keyboard_input
+      j process_p1_inputs
       
       p_pressed_pause:
       li $s5 1
-      j end_check_keyboard_input
+      j process_p1_inputs
 
     q_pressed:
       li $v0, 10                      # Quit gracefully
@@ -1096,7 +1135,7 @@ check_keyboard_input:
       lw $t1 PLAYER_1_BOUND_LEFT    # set t1 to left bound 
       addi $t0 $s2 -32              # set t0 to playerpos - 32
       bge $t0 $t1 move_fool_left    # check if moving left takes the fool beyond the border
-      j end_check_keyboard_input    # end keyboard input
+      j process_p2_inputs    # end keyboard input
       move_fool_left:
       # push ra to stack
       addi $sp, $sp, -4          # moves stack pointer a word
@@ -1110,7 +1149,7 @@ check_keyboard_input:
       lw $ra, 0($sp)           # load old ra to new $ra from stack
       addi $sp, $sp, 4         # moves the stack pointer up 4
 
-      j end_check_keyboard_input    # end keyboard input 
+      j process_p2_inputs    # end keyboard input
 
     d_pressed:
       # function to handle when d key is pressed
@@ -1120,7 +1159,7 @@ check_keyboard_input:
       lw $t1 PLAYER_1_BOUND_RIGHT   # set right bound to t1 
       addi $t0 $s2 32               # set t0 to playerpos + 32
       ble $t0 $t1 move_fool_right   # check if moving left takes the fool beyond the border
-      j end_check_keyboard_input    # end keyboard input
+      j process_p2_inputs    # end keyboard input
       move_fool_right:
       # push ra to stack
       addi $sp, $sp, -4          # moves stack pointer a word
@@ -1134,7 +1173,7 @@ check_keyboard_input:
       lw $ra, 0($sp)           # load old ra to new $ra from stack
       addi $sp, $sp, 4         # moves the stack pointer up 4
 
-      j end_check_keyboard_input    # end keyboard input 
+      j process_p2_inputs    # end keyboard input
 
   w_pressed:
     # function for when w is pressed, the 'throw' function
@@ -1205,7 +1244,7 @@ check_keyboard_input:
       lw $ra, 0($sp)           # load old ra to new $ra from stack
       addi $sp, $sp, 4         # moves the stack pointer up 4
 
-    j end_check_keyboard_input    # end keyboard input 
+      j process_p2_inputs    # end keyboard input
 
 
   s_pressed:
@@ -1255,7 +1294,7 @@ check_keyboard_input:
         lw $ra, 0($sp)           # load old ra to new $ra from stack
         addi $sp, $sp, 4         # moves the stack pointer up 4
   
-        j end_check_keyboard_input    # end keyboard input
+      j process_p2_inputs    # end keyboard input
       
       
 
@@ -2194,7 +2233,7 @@ check_game_over_2:
 
 # called in the main check_input function
 
-    left_arrow_pressed:
+    j_pressed:
       # function to handle when left key is pressed
       # moves player_pos left by 32, if does not exceed the bound
       # temporaries: t0 = s2 - 32, = player pos - 32, t1 = left bound
@@ -2218,7 +2257,7 @@ check_game_over_2:
 
       j end_check_keyboard_input    # end keyboard input 
 
-    right_arrow_pressed:
+    l_pressed:
       # function to handle when right key is pressed
       # moves player_pos right by 32, if does not exceed the bound
       # temporaries: t0 = s2 + 32, = player pos + 32, t1 = right bound 
@@ -2242,7 +2281,7 @@ check_game_over_2:
 
       j end_check_keyboard_input    # end keyboard input 
 
-  up_arrow_pressed:
+  i_pressed:
     # function for when up is pressed, the 'throw' function
     # Should throw all bubbles being held straight up and line them up vertically, then check for a three in a row 
     # uses helper function get_lowest_bubble_grid_pos, which uses t0-3
@@ -2314,7 +2353,7 @@ check_game_over_2:
     j end_check_keyboard_input    # end keyboard input 
 
 
-  down_arrow_pressed:
+  k_pressed:
     # TODO: implement grab control 
 
       # v0 is current grid position(column * 7)
