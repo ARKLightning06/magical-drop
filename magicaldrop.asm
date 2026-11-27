@@ -983,8 +983,179 @@ get_pixel_from_grid:
   add $t2 $t2 $t0            # add that difference (t2) to the start of grid template
   lw $v0 0($t2)              # load the pixel pos stored in grid template at the address t2 
   
-  jr $ra                     # return 
+  jr $ra                     # return
 
+
+is_in_left_column:
+  # helper function checking if a given grid position is in the left column of the bitmap
+  # could be implemented more elegantly with math, but seems more efficient to brute force it 
+  # takes input parameter a0 = index being checked
+  # outputs v0, which is 0 if not in left column, 1 if yes in left column
+  # temporaries: t3 = address checking, t4 = ending loop condition
+
+  li $v0 0           # set v0 to 0 
+  la $t3 CURRENT_GRID
+  addi $t4 $t3 392  # set to loop end condition 
+  is_in_left_column_loop:
+    bge $t3 $t4 in_left_column_return_false      # if index goes out of bounds, end loop 
+    beq $a0 $t3 in_left_column_return_true       # if parameter is equal to index being checked, return true 
+    addi $t3 $t3 28                              # increment t3 down a column 
+    j is_in_left_column_loop
+    
+
+  in_left_column_return_true:
+    li $v0 1     # set v0 to 1 
+  in_left_column_return_false:
+    jr $ra       # return 
+
+
+is_in_right_column:
+  # helper function checking if a given grid position is in the right column of the bitmap
+  # could be implemented more elegantly with math, but seems more efficient to brute force it 
+  # takes input parameter a0 = index being checked
+  # outputs v0, which is 0 if not in left column, 1 if yes in left column
+  # temporaries: t3 = address checking, t4 = ending loop condition
+
+  li $v0 0           # set v0 to 0 
+  la $t3 CURRENT_GRID
+  addi $t4 $t3 392  # set to loop end condition 
+  addi $t3 $t3 24   # set t3 to top of right column 
+  is_in_right_column_loop:
+    bge $t3 $t4 in_right_column_return_false      # if index goes out of bounds, end loop 
+    beq $a0 $t3 in_right_column_return_true       # if parameter is equal to index being checked, return true 
+    addi $t3 $t3 28                              # increment t3 down a column 
+    j is_in_right_column_loop
+    
+
+  in_right_column_return_true:
+    li $v0 1     # set v0 to 1 
+  in_right_column_return_false:
+    jr $ra       # return 
+
+
+add_neighbors_to_bubbleset_recursive:
+  # function to add neighbors of a given bubble to the last bubbleset, which recurses until no neighbors of the same color are adjacent 
+  # takes input a0 = bubble to check neighbors (which should already be in the bubbleset)
+  # uses helper function is_in_bubblesqueue, which takes a0 input as a grid position and returns v0 as 0 if false, 1 if true (0 if not in, 1 if in), also uses temps 0-2
+  # uses helper function add_to_bubbleset, which uses t0-2 and takes input parameter a0 = grid pos being added 
+  # uses helper functions is_in_left_column and is_in_right_column, which takes input parameter a0 = grid position being checked, returns v0 = 0 if not in col, 1 if in  
+  # temporaries t9 = neighbor address, t8 = bound to check, t7 = main color, t6 = neighbor color 
+  
+    # push ra to stack
+    addi $sp, $sp, -4          # moves stack pointer a word
+    sw $ra 0($sp)              # push a word onto the stack
+
+    la $t8 CURRENT_GRID        # set t8 to current grid 
+    addi $t9 $a0 0             # set t9 to address to check 
+    lw $t7 0($t9)              # load the color of a0 into t7 
+
+    recurse_below:    # in hindsight, this naming convention is slightly misleading... below in memory, though it's checking the position above in the bitmap
+    addi $t9 $t9 -28           # check below 
+    la $t8 CURRENT_GRID        # set t8 to current grid 
+    blt $t9 $t8 recurse_above  # if out of bounds, end
+    lw $t6 0($t9)              # load the neighbor bottom color to t6 
+    bne $t6 $t7 recurse_above  # if colors not equal, end 
+    # else, check if neighbor in bubbleset 
+    addi $a0 $t9 0             # set a0 to bottom neighbor 
+    jal is_in_bubblesqueue     # check if a0 is in bubblesqueue 
+    beq $v0 1 recurse_above    # if it is already in bubbleset, end 
+    # else, we have a bubble that is same color and not already in the bubbleset, so we add then recurse 
+    jal add_to_bubbleset       # add bottom neighbor to bubbleset (we already set a0 to t9)
+    # push t9 to stack
+    addi $sp, $sp, -4          # moves stack pointer a word
+    sw $t9 0($sp)              # push a word onto the stack
+
+    jal add_neighbors_to_bubbleset_recursive
+
+    # pull t9 from stack 
+    lw $t9, 0($sp)           # load old ra to new $ra from stack
+    addi $sp, $sp, 4         # moves the stack pointer up 4
+    j recurse_above
+
+    recurse_above:         # position above in memory, below in bitmap
+    addi $t9 $t9 56        # move t9 up two rows, to check the upper neighbor 
+    la $t8 CURRENT_GRID        # set t8 to current grid 
+    addi $t8 $t8 388       # set t8 to lower bound (spatially, upper bound numerically)
+    bgt $t9 $t8 recurse_left  # if out of bounds, end
+    lw $t6 0($t9)              # load the neighbor upper color to t6 
+    bne $t6 $t7 recurse_left  # if colors not equal, end 
+    # else, check if neighbor in bubbleset 
+    addi $a0 $t9 0             # set a0 to bottom neighbor 
+    jal is_in_bubblesqueue     # check if a0 is in bubblesqueue 
+    beq $v0 1 recurse_left    # if it is already in bubbleset, end 
+    # else, we have a bubble that is same color and not already in the bubbleset, so we add then recurse 
+    jal add_to_bubbleset       # add bottom neighbor to bubbleset (we already set a0 to t9)
+    # push t9 to stack
+    addi $sp, $sp, -4          # moves stack pointer a word
+    sw $t9 0($sp)              # push a word onto the stack
+
+    jal add_neighbors_to_bubbleset_recursive
+
+    # pull t9 from stack 
+    lw $t9, 0($sp)           # load old ra to new $ra from stack
+    addi $sp, $sp, 4         # moves the stack pointer up 4
+    j recurse_left
+
+    recurse_left:
+    addi $t9 $t9 -32        # move t9 up one row then to the left, to check the left neighbor...  
+    la $t8 CURRENT_GRID        # set t8 to current grid 
+    blt $t9 $t8 recurse_right  # if out of bounds, end
+    addi $a0 $t9 0          # set a0 to t9 
+    jal is_in_right_column  # set v0 to 0 if not in right col, 1 if is in right col 
+    bne $v0 $zero recurse_right     # if t9 is in right column, then t9 + 4 is in left column, so end recursion (so check if v0 doesn't equal 0)
+    lw $t6 0($t9)              # load the neighbor upper color to t6 
+    bne $t6 $t7 recurse_right  # if colors not equal, end 
+    # else, check if neighbor in bubbleset 
+    addi $a0 $t9 0             # set a0 to bottom neighbor 
+    jal is_in_bubblesqueue     # check if a0 is in bubblesqueue 
+    beq $v0 1 recurse_right    # if it is already in bubbleset, end 
+    # else, we have a bubble that is same color and not already in the bubbleset, so we add then recurse 
+    jal add_to_bubbleset       # add bottom neighbor to bubbleset (we already set a0 to t9)
+    # push t9 to stack
+    addi $sp, $sp, -4          # moves stack pointer a word
+    sw $t9 0($sp)              # push a word onto the stack
+
+    jal add_neighbors_to_bubbleset_recursive
+
+    # pull t9 from stack 
+    lw $t9, 0($sp)           # load old ra to new $ra from stack
+    addi $sp, $sp, 4         # moves the stack pointer up 4
+    j recurse_right
+
+  recurse_right:
+    addi $t9 $t9 8        # move t9 right two, shifting from left neighbor to right neighbor   
+    la $t8 CURRENT_GRID     # set t8 to lower bound
+    addi $t8 $t8 392        # set t8 to upper bound 
+    bge $t9 $t8 finish_recursing  # if out of bounds, end
+    addi $a0 $t9 0          # set a0 to t9 
+    jal is_in_left_column  # set v0 to 0 if not in left col, 1 if is in left col 
+    bne $v0 $zero finish_recursing     # if t9 is in right column, then t9 + 4 is in left column, so end recursion (so check if v0 doesn't equal 0)
+    lw $t6 0($t9)              # load the neighbor right color to t6 
+    bne $t6 $t7 finish_recursing  # if colors not equal, end 
+    # else, check if neighbor in bubbleset 
+    addi $a0 $t9 0             # set a0 to bottom neighbor 
+    jal is_in_bubblesqueue     # check if a0 is in bubblesqueue 
+    beq $v0 1 finish_recursing    # if it is already in bubbleset, end 
+    # else, we have a bubble that is same color and not already in the bubbleset, so we add then recurse 
+    jal add_to_bubbleset       # add bottom neighbor to bubbleset (we already set a0 to t9)
+    # push t9 to stack
+    addi $sp, $sp, -4          # moves stack pointer a word
+    sw $t9 0($sp)              # push a word onto the stack
+
+    jal add_neighbors_to_bubbleset_recursive
+
+    # pull t9 from stack 
+    lw $t9, 0($sp)           # load old ra to new $ra from stack
+    addi $sp, $sp, 4         # moves the stack pointer up 4
+    j finish_recursing
+
+    finish_recursing:
+
+    # pull ra from stack 
+    lw $ra, 0($sp)           # load old ra to new $ra from stack
+    addi $sp, $sp, 4         # moves the stack pointer up 4
+
+    jr $ra                   # return 
 
 
 check_game_over:
@@ -1179,6 +1350,7 @@ check_keyboard_input:
     # function for when w is pressed, the 'throw' function
     # Should throw all bubbles being held straight up and line them up vertically, then check for a three in a row 
     # uses helper function get_lowest_bubble_grid_pos, which uses t0-3
+    # uses helper function add_neighbors_to_bubbleset_recursive which uses pretty much all temps 
     # saves: s1 (bubbles held) s4 (held color)
     # temporaries t0 = bubble grid pos, t6 = grid position of upper bubbles, 
     # t7 = color checker also 3, t8 = lower/upper bound loop end condition, t9 = bubbles in a row
@@ -1207,7 +1379,7 @@ check_keyboard_input:
         bne $t7 $s4 start_throwing_bubbles   # if the lowest bubble doesn't match colors with the held bubble, irrelevant, end loop
         addi $t9 $t9 1                       # increment t9 by 1 
         addi $a0 $t6 0                       # set a0 to t6
-        jal add_to_bubbleset                 # add a0 to bubbleset 
+        # jal add_to_bubbleset                 # add a0 to bubbleset 
         addi $t6 $t6 -28                     # decrement t6 to next row 
         j count_bubbles_above_loop
         
@@ -1224,7 +1396,7 @@ check_keyboard_input:
         addi $s1 $s1 -1          # decrement s1 by 1 
         addi $t6 $t6 28          # shift t6 to index of next row 
         addi $a0 $t6 0           # set a0 to t6
-        jal add_to_bubbleset     # add a0 to bubbleset
+        # jal add_to_bubbleset     # add a0 to bubbleset
         bgt $t6 $t8 throw_bubble_loop    # if at the bottom of the grid, continue with the loop but do not draw anything new 
         sw $s4 0($t6)            # throw the bubble (store it in current grid)
         j throw_bubble_loop
@@ -1236,7 +1408,10 @@ check_keyboard_input:
         j w_pressed_end                 # jump to end 
 
       pop_some_bubbles:
-        # this is now handled by the bubbleset and game update (in theory at least...)
+        # the actual popping is handled by game loop... but adding horizontal is still needed
+        jal get_lowest_bubble_grid_pos      # returns grid pos in v0, returns 0 in v1 if there is a bubble 
+        addi $a0 $v0 0                      # set a0 to grid pos of lowest bubble 
+        jal add_neighbors_to_bubbleset_recursive    # add everything adjacent to bubblset 
         j w_pressed_end
 
       w_pressed_end:
@@ -1380,7 +1555,7 @@ add_to_bubbleset:
     sw $ra 0($sp)              # push a word onto the stack
 
     jal get_queue_beginning    # get beginning of the queue into v0 
-    sw $a0 0($v0)              # store combo time into the beginning of the stack 
+    sw $a0 0($v0)              # store current grid pos into the beginning of the stack 
 
     # pull ra from stack 
     lw $ra, 0($sp)           # load old ra to new $ra from stack
@@ -2183,6 +2358,179 @@ get_lowest_bubble_grid_pos_2:
 
     jr $ra 
 
+    
+is_in_left_column_2:
+  # helper function checking if a given grid position is in the left column of the bitmap
+  # could be implemented more elegantly with math, but seems more efficient to brute force it 
+  # takes input parameter a0 = index being checked
+  # outputs v0, which is 0 if not in left column, 1 if yes in left column
+  # temporaries: t3 = address checking, t4 = ending loop condition
+
+  li $v0 0           # set v0 to 0 
+  la $t3 CURRENT_GRID_2
+  addi $t4 $t3 392  # set to loop end condition 
+  is_in_left_column_loop_2:
+    bge $t3 $t4 in_left_column_return_false_2      # if index goes out of bounds, end loop 
+    beq $a0 $t3 in_left_column_return_true_2       # if parameter is equal to index being checked, return true 
+    addi $t3 $t3 28                              # increment t3 down a column 
+    j is_in_left_column_loop_2
+    
+
+  in_left_column_return_true_2:
+    li $v0 1     # set v0 to 1 
+  in_left_column_return_false_2:
+    jr $ra       # return 
+
+
+is_in_right_column_2:
+  # helper function checking if a given grid position is in the right column of the bitmap
+  # could be implemented more elegantly with math, but seems more efficient to brute force it 
+  # takes input parameter a0 = index being checked
+  # outputs v0, which is 0 if not in left column, 1 if yes in left column
+  # temporaries: t3 = address checking, t4 = ending loop condition
+
+  li $v0 0           # set v0 to 0 
+  la $t3 CURRENT_GRID_2
+  addi $t4 $t3 392  # set to loop end condition 
+  addi $t3 $t3 24   # set t3 to top of right column 
+  is_in_right_column_loop_2:
+    bge $t3 $t4 in_right_column_return_false_2      # if index goes out of bounds, end loop 
+    beq $a0 $t3 in_right_column_return_true_2       # if parameter is equal to index being checked, return true 
+    addi $t3 $t3 28                              # increment t3 down a column 
+    j is_in_right_column_loop_2
+    
+
+  in_right_column_return_true_2:
+    li $v0 1     # set v0 to 1 
+  in_right_column_return_false_2:
+    jr $ra       # return 
+
+
+
+add_neighbors_to_bubbleset_recursive_2:
+  # function to add neighbors of a given bubble to the last bubbleset, which recurses until no neighbors of the same color are adjacent 
+  # takes input a0 = bubble to check neighbors (which should already be in the bubbleset)
+  # uses helper function is_in_bubblesqueue, which takes a0 input as a grid position and returns v0 as 0 if false, 1 if true (0 if not in, 1 if in), also uses temps 0-2
+  # uses helper function add_to_bubbleset, which uses t0-2 and takes input parameter a0 = grid pos being added 
+  # uses helper functions is_in_left_column and is_in_right_column, which takes input parameter a0 = grid position being checked, returns v0 = 0 if not in col, 1 if in  
+  # temporaries t9 = neighbor address, t8 = bound to check, t7 = main color, t6 = neighbor color 
+  
+    # push ra to stack
+    addi $sp, $sp, -4          # moves stack pointer a word
+    sw $ra 0($sp)              # push a word onto the stack
+
+    la $t8 CURRENT_GRID_2        # set t8 to current grid 
+    addi $t9 $a0 0             # set t9 to address to check 
+    lw $t7 0($t9)              # load the color of a0 into t7 
+
+    recurse_below_2:    # in hindsight, this naming convention is slightly misleading... below in memory, though it's checking the position above in the bitmap
+    addi $t9 $t9 -28           # check below 
+    la $t8 CURRENT_GRID_2        # set t8 to current grid 
+    blt $t9 $t8 recurse_above_2  # if out of bounds, end
+    lw $t6 0($t9)              # load the neighbor bottom color to t6 
+    bne $t6 $t7 recurse_above_2  # if colors not equal, end 
+    # else, check if neighbor in bubbleset 
+    addi $a0 $t9 0             # set a0 to bottom neighbor 
+    jal is_in_bubblesqueue_2     # check if a0 is in bubblesqueue 
+    beq $v0 1 recurse_above_2    # if it is already in bubbleset, end 
+    # else, we have a bubble that is same color and not already in the bubbleset, so we add then recurse 
+    jal add_to_bubbleset_2       # add bottom neighbor to bubbleset (we already set a0 to t9)
+    # push t9 to stack
+    addi $sp, $sp, -4          # moves stack pointer a word
+    sw $t9 0($sp)              # push a word onto the stack
+
+    jal add_neighbors_to_bubbleset_recursive_2
+
+    # pull t9 from stack 
+    lw $t9, 0($sp)           # load old ra to new $ra from stack
+    addi $sp, $sp, 4         # moves the stack pointer up 4
+    j recurse_above_2
+
+    recurse_above_2:         # position above in memory, below in bitmap
+    addi $t9 $t9 56        # move t9 up two rows, to check the upper neighbor 
+    la $t8 CURRENT_GRID_2        # set t8 to current grid 
+    addi $t8 $t8 388       # set t8 to lower bound (spatially, upper bound numerically)
+    bgt $t9 $t8 recurse_left_2  # if out of bounds, end
+    lw $t6 0($t9)              # load the neighbor upper color to t6 
+    bne $t6 $t7 recurse_left_2  # if colors not equal, end 
+    # else, check if neighbor in bubbleset 
+    addi $a0 $t9 0             # set a0 to bottom neighbor 
+    jal is_in_bubblesqueue_2     # check if a0 is in bubblesqueue 
+    beq $v0 1 recurse_left_2    # if it is already in bubbleset, end 
+    # else, we have a bubble that is same color and not already in the bubbleset, so we add then recurse 
+    jal add_to_bubbleset_2       # add bottom neighbor to bubbleset (we already set a0 to t9)
+    # push t9 to stack
+    addi $sp, $sp, -4          # moves stack pointer a word
+    sw $t9 0($sp)              # push a word onto the stack
+
+    jal add_neighbors_to_bubbleset_recursive_2
+
+    # pull t9 from stack 
+    lw $t9, 0($sp)           # load old ra to new $ra from stack
+    addi $sp, $sp, 4         # moves the stack pointer up 4
+    j recurse_left_2
+
+    recurse_left_2:
+    addi $t9 $t9 -32        # move t9 up one row then to the left, to check the left neighbor...  
+    la $t8 CURRENT_GRID_2        # set t8 to current grid 
+    blt $t9 $t8 recurse_right_2  # if out of bounds, end
+    addi $a0 $t9 0          # set a0 to t9 
+    jal is_in_right_column_2  # set v0 to 0 if not in right col, 1 if is in right col 
+    bne $v0 $zero recurse_right_2     # if t9 is in right column, then t9 + 4 is in left column, so end recursion (so check if v0 doesn't equal 0)
+    lw $t6 0($t9)              # load the neighbor upper color to t6 
+    bne $t6 $t7 recurse_right_2  # if colors not equal, end 
+    # else, check if neighbor in bubbleset 
+    addi $a0 $t9 0             # set a0 to bottom neighbor 
+    jal is_in_bubblesqueue_2     # check if a0 is in bubblesqueue 
+    beq $v0 1 recurse_right_2    # if it is already in bubbleset, end 
+    # else, we have a bubble that is same color and not already in the bubbleset, so we add then recurse 
+    jal add_to_bubbleset_2       # add bottom neighbor to bubbleset (we already set a0 to t9)
+    # push t9 to stack
+    addi $sp, $sp, -4          # moves stack pointer a word
+    sw $t9 0($sp)              # push a word onto the stack
+
+    jal add_neighbors_to_bubbleset_recursive_2
+
+    # pull t9 from stack 
+    lw $t9, 0($sp)           # load old ra to new $ra from stack
+    addi $sp, $sp, 4         # moves the stack pointer up 4
+    j recurse_right_2
+
+  recurse_right_2:
+    addi $t9 $t9 8        # move t9 right two, shifting from left neighbor to right neighbor   
+    la $t8 CURRENT_GRID_2     # set t8 to lower bound
+    addi $t8 $t8 392        # set t8 to upper bound 
+    bge $t9 $t8 finish_recursing_2  # if out of bounds, end
+    addi $a0 $t9 0          # set a0 to t9 
+    jal is_in_left_column_2  # set v0 to 0 if not in left col, 1 if is in left col 
+    bne $v0 $zero finish_recursing_2     # if t9 is in right column, then t9 + 4 is in left column, so end recursion (so check if v0 doesn't equal 0)
+    lw $t6 0($t9)              # load the neighbor right color to t6 
+    bne $t6 $t7 finish_recursing_2  # if colors not equal, end 
+    # else, check if neighbor in bubbleset 
+    addi $a0 $t9 0             # set a0 to bottom neighbor 
+    jal is_in_bubblesqueue_2     # check if a0 is in bubblesqueue 
+    beq $v0 1 finish_recursing_2    # if it is already in bubbleset, end 
+    # else, we have a bubble that is same color and not already in the bubbleset, so we add then recurse 
+    jal add_to_bubbleset_2       # add bottom neighbor to bubbleset (we already set a0 to t9)
+    # push t9 to stack
+    addi $sp, $sp, -4          # moves stack pointer a word
+    sw $t9 0($sp)              # push a word onto the stack
+
+    jal add_neighbors_to_bubbleset_recursive_2
+
+    # pull t9 from stack 
+    lw $t9, 0($sp)           # load old ra to new $ra from stack
+    addi $sp, $sp, 4         # moves the stack pointer up 4
+    j finish_recursing_2
+
+    finish_recursing_2:
+
+    # pull ra from stack 
+    lw $ra, 0($sp)           # load old ra to new $ra from stack
+    addi $sp, $sp, 4         # moves the stack pointer up 4
+
+    jr $ra                   # return 
+
 
 check_game_over_2:
   # function to check of the game ends
@@ -2313,7 +2661,7 @@ check_game_over_2:
         bne $t7 $s7 start_throwing_bubbles_2   # if the lowest bubble doesn't match colors with the held bubble, irrelevant, end loop
         addi $t9 $t9 1                       # increment t9 by 1 
         addi $a0 $t6 0                       # set a0 to t6
-        jal add_to_bubbleset_2                # add a0 to bubbleset 
+        # jal add_to_bubbleset_2                # add a0 to bubbleset 
         addi $t6 $t6 -28                     # decrement t6 to next row 
         j count_bubbles_above_loop_2
         
@@ -2330,7 +2678,7 @@ check_game_over_2:
         addi $s3 $s3 -1          # decrement s1 by 1 
         addi $t6 $t6 28          # shift t6 to index of next row 
         addi $a0 $t6 0           # set a0 to t6
-        jal add_to_bubbleset_2     # add a0 to bubbleset
+        # jal add_to_bubbleset_2     # add a0 to bubbleset
         bgt $t6 $t8 throw_bubble_loop_2    # if at the bottom of the grid, continue with the loop but do not draw anything new 
         sw $s7 0($t6)            # throw the bubble (store it in current grid)
         j throw_bubble_loop_2
@@ -2342,7 +2690,11 @@ check_game_over_2:
         j up_arrow_pressed_end                 # jump to end 
 
       pop_some_bubbles_2:
-        # this is now handled by the bubbleset and game update (in theory at least...)
+        # this adds everything to the bubbleset, including neighbors 
+        jal get_lowest_bubble_grid_pos_2      # returns grid pos in v0, returns 0 in v1 if there is a bubble 
+        addi $a0 $v0 0                      # set a0 to grid pos of lowest bubble 
+        jal add_neighbors_to_bubbleset_recursive_2    # add everything adjacent to bubblset 
+
         j up_arrow_pressed_end
 
       up_arrow_pressed_end:
